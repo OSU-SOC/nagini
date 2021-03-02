@@ -1,0 +1,4 @@
+data_sources:
+  - name: test_name
+    threads: 6
+    manual_path: /a/b

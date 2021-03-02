@@ -3,12 +3,19 @@ package lib
 import "io/ioutil"
 import "gopkg.in/yaml.v2"
 
+// The DataSource struct represents fields for an individual data source
+// found in the config YAML file. It represents an individual log pull
+// set, which will be stored in {ProjectName}/{Name}, unless ManualPath
+// is specified.
+// It will use Threads as the number of threads on the system to pull data
+// with. 
 type DataSource struct {
 	Name string // name
 	Threads int // threads
 	ManualPath string `yaml:"manual_path"` // manual_path
 }
 
+// The High-Level Config
 type Config struct {
 	DataSources []DataSource `yaml:"data_sources"` // data_sources
 }
