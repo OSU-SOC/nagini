@@ -14,7 +14,9 @@ func TestParseConfig(t *testing.T) {
 		expectedErr		error
 	}
 
+	// Test Table to loop over.
 	testTable := []testEntry{
+		// TEST #1
 		{
 			input: "test1.yaml",
 			expectedData: lib.Config {
@@ -28,10 +30,11 @@ func TestParseConfig(t *testing.T) {
 			},
 			expectedErr: nil,
 		},
+		// TEST #2 ...
 	}
 
+	// Run function over test table
 	for _, testCase := range testTable {
-		
 		t.Run(testCase.input, func(t *testing.T) {
 			actualData, actualErr := lib.ParseConfig(testCase.input)
 			if !reflect.DeepEqual(actualData, testCase.expectedData) {
