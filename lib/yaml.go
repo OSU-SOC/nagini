@@ -1,18 +1,24 @@
 package lib
 
-import "io/ioutil"
-import "gopkg.in/yaml.v2"
+import (
+	"io/ioutil"
+
+	"gopkg.in/yaml.v2"
+)
 
 // The DataSource struct represents fields for an individual data source
 // found in the config YAML file. It represents an individual log pull
 // set, which will be stored in {ProjectName}/{Name}, unless ManualPath
 // is specified.
 // It will use Threads as the number of threads on the system to pull data
-// with. 
+// with.
 type DataSource struct {
-	Name string // name
-	Threads int // threads
+	Name    string // name
+	Threads int    // threads
+
+	// one of: use specified log-path OR specify
 	ManualPath string `yaml:"manual_path"` // manual_path
+	Type       string `yaml:"log_type"`    //log_type
 }
 
 // The High-Level Config
@@ -28,6 +34,6 @@ func ParseConfig(filepath string) (configData Config, err error) {
 	configBuffer, err := ioutil.ReadFile(filepath)
 
 	// Parse the YAML file, and check for generated errors.
-    err = yaml.Unmarshal(configBuffer, &configData)
+	err = yaml.Unmarshal(configBuffer, &configData)
 	return configData, err
 }

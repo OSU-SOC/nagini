@@ -1,18 +1,18 @@
 package cmd
 
 import (
-	"fmt"
+	fmt "fmt"
 
-	"github.com/spf13/cobra"
 	lib "github.com/OSU-SOC/nagini/lib"
+	cobra "github.com/spf13/cobra"
 )
 
 // logCmd represents the log command
 var logCmd = &cobra.Command{
 	Use:   "log [config YAML]",
 	Short: "Parse a YAML file and pull logs.",
-	Long: `Parse a YAML file and pull logs.`,
-    Args: cobra.MinimumNArgs(1),
+	Long:  `Parse a YAML file and pull logs.`,
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(lib.ParseConfig(args[0]))
 	},
