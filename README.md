@@ -1,6 +1,6 @@
 # Nagini
 ## Installing
-1. Clone Repo
+1. Install Go
 2. Run:
 ```bash
 go install .
