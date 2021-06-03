@@ -33,6 +33,7 @@ var threads uint     // number of threads to run
 var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
 var logDir string    // directory containing all zeek logs
+var logType string   // type of log (rdp, ftp, etc)
 
 // calculated start time and end time values
 var startTime time.Time
@@ -52,6 +53,7 @@ where my_script.py has the following required syntax:
 `,
 	Args: cobra.ExactArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
+		logType = args[0]
 		// build time range timestamps
 		var dateStrings = strings.Split(timeRange, "-")
 		startTime, startErr := time.Parse(lib.TimeFormatShort, dateStrings[0])
@@ -99,7 +101,7 @@ where my_script.py has the following required syntax:
 		// list params
 
 		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
-		cmd.Printf("Log Type:\t\t%s\n", args[0])
+		cmd.Printf("Log Type:\t\t%s\n", logType)
 		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
 		cmd.Printf("Script to Run:\t\t%s\n", scriptPath)
 		cmd.Printf("Threads:\t\t%d\n", threads)
@@ -129,6 +131,13 @@ where my_script.py has the following required syntax:
 			cmd.PrintErrln(e)
 		} else {
 			cmd.Printf("created dir %s\n", resolvedDir)
+		}
+
+		// Continue, so lets start parsing
+		curDate := startTime
+		for curDate.Before(endTime) {
+			cmd.Printf("%s/%d-%d-%d/%s.%d\n", resolvedLogDir, curDate.Year(), curDate.Month(), curDate.Day(), logType, curDate.Hour())
+			curDate = curDate.Add(time.Hour)
 		}
 	},
 }
