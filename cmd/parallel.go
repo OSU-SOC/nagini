@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	lib "github.com/OSU-SOC/nagini/lib"
+	wmenu "gopkg.in/dixonwille/wmenu.v4"
 )
 
 // args
@@ -64,13 +65,34 @@ where my_script.py has the following required syntax:
 		if e != nil {
 			panic("fatal error: could not resolve relative path in user provided input")
 		}
-		e = lib.TryCreateDir(resolvedDir)
-		if e != nil {
-			panic("error" + e.Error())
-		}
 
 		fmt.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
-		fmt.Printf("Output Directory:\t%s\n", resolvedDir)
+		fmt.Printf("Output Directory:\t%s\n\n", resolvedDir)
+
+		// prompt if continue
+		var start int
+		startMenu := wmenu.NewMenu("Start?")
+		startMenu.IsYesNo(0)
+		startMenu.LoopOnInvalid()
+		startMenu.Action(func(opts []wmenu.Opt) error {
+			start = opts[0].ID
+			return nil
+		})
+		e = startMenu.Run()
+		if e != nil {
+			panic(e)
+		}
+
+		// if start is no, do not continue
+		if start == 1 {
+			return
+		}
+		e = lib.TryCreateDir(resolvedDir)
+		if e != nil {
+			panic(e)
+		} else {
+			fmt.Printf("created dir %s\n", resolvedDir)
+		}
 	},
 }
 
