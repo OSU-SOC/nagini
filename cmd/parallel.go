@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 // args
 var threads uint     // number of threads to run
 var timeRange string // string format of time range to go over
+var outputDir string // directory to output logs
 
 // calculated start time and end time values
 var startTime time.Time
@@ -54,23 +56,47 @@ where my_script.py has the following required syntax:
 		if startErr != nil || endErr != nil {
 			panic("Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
 		}
-		fmt.Printf("will run through dates %s through %s", startTime, endTime)
+		fmt.Printf("will run through dates %s through %s", startTime.Local(), endTime.Local())
+
+		resolvedDir, e := filepath.Abs(outputDir)
+		if e != nil {
+			panic("fatal error: could not resolve relative path in user provided input")
+		}
+		e = lib.TryCreateDir(resolvedDir)
+		if e != nil {
+			panic("error" + e.Error())
+		}
 	},
 }
 
 func init() {
+
 	rootCmd.AddCommand(parallelCmd)
 
 	// Add flags
+
 	// threads
 	parallelCmd.PersistentFlags().UintVarP(&threads, "threads", "t", 1, "Number of threads to run in parallel")
+
 	// time range to parse
 	parallelCmd.PersistentFlags().StringVarP(
-		&timeRange, "timeRange", "r",
+		&timeRange, "timerange", "r",
 		fmt.Sprintf( // write range of last 24 hours
 			"%s-%s",
 			time.Now().AddDate(0, 0, -1).Format(lib.TimeFormatShort), // yesterday at this time
 			time.Now().Format(lib.TimeFormatShort)),                  // right now
 		"time-range (local time). unspecified: last 24 hours. Format: YYYY/MM/DD:HH-YYYY/MM/DD:HH",
+	)
+
+	// default path for log storage is ./output-DATE
+	// uses this if no path specified.
+	defaultPath, e := filepath.Abs("./output-" + time.Now().Format(lib.TimeFormatLongNum))
+	if e != nil {
+		panic("fatal error: could not resolve relative path")
+	}
+
+	parallelCmd.PersistentFlags().StringVarP(&outputDir, "outdir", "o",
+		defaultPath,
+		"filtered logs output directory",
 	)
 }
