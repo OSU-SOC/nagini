@@ -168,23 +168,37 @@ where my_script.py has the following required syntax:
 						outputDir,
 						filepath.Base(logFile)+".json",
 					)
-					cmd.Printf("queing: %s -> %s\n", logFile, outputFileTemp)
 					wgDate.Add(1)
-					// TODO: go routine:
-					//	-	run script over logfile.
-					//	-	output to temp file.
-					//	- 	exit.
+
+					// start concurrent method. Look through this log file, write to temp file, and then let
+					// the date know it is done.
+					go func(logFile string, outputFileTemp string, wgDate *sync.WaitGroup) {
+						cmd.Printf("queued: %s -> %s\n", logFile, outputFileTemp)
+						// TODO:
+						//	-	run script over logfile.
+						time.Sleep(time.Second)
+						//	-	output to temp file.
+						defer wgDate.Done()
+					}(logFile, outputFileTemp, &wgDate)
 				}
 				curTime = curTime.Add(time.Hour)
 			}
 
 			// wait for all date's to finish each log and then for them to concat into a single file.
 			wgAll.Add(1)
-			// TODO: go routine:
-			//	-	wait forall wgDate.
-			//  -	concat all temp files into one file.
-			//	-	clean up temp files.
-			//	-	end routine.
+
+			go func(curDate time.Time, wgAll *sync.WaitGroup) {
+				// wait for all log files for this date to finish.
+				wgDate.Wait()
+				cmd.Printf("All logs for %s finished. Concatinating...\n", curDate.Format(lib.TimeFormatDate))
+				// TODO:
+				//  -	concat all temp files into one file.
+				//	-	clean up temp files.
+				time.Sleep(time.Second)
+				// let our command know this date is done.
+				cmd.Printf("Complete: %s\n", curDate.Format(lib.TimeFormatDate))
+				defer wgAll.Done()
+			}(curDate, &wgAll)
 
 			curDate = curDate.AddDate(0, 0, 1)
 		}
