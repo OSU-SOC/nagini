@@ -182,9 +182,7 @@ where my_script.py has the following required syntax:
 					go func(logFile string, outputFileTemp string, wgDate *sync.WaitGroup) {
 						cmd.Printf("queued: %s -> %s\n", logFile, outputFileTemp)
 
-						// TODO:
-						//	-	run script over logfile.
-						//	-	output to temp file.
+						// run script, which should handle the file writing itself currently.
 						runErr := exec.Command(scriptPath, logFile, outputFileTemp).Run()
 						if runErr != nil {
 							cmd.PrintErrln(runErr)
