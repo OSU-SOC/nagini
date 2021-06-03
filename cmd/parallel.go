@@ -42,22 +42,24 @@ var parallelCmd = &cobra.Command{
 	Long: `Legacy parallel for backwards compatibility with old parallel.py.
 
 Example:
-	nagini parallel 8 my_script.py 
+	nagini parallel -t 8 my_script.py 
 
 where my_script.py has the following required syntax:
 	./my_script.py [input file] [output file]
 `,
 	Args: cobra.MinimumNArgs(1), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
+		// build time range timestamps
 		var dateStrings = strings.Split(timeRange, "-")
 		startTime, startErr := time.Parse(lib.TimeFormatShort, dateStrings[0])
 		endTime, endErr := time.Parse(lib.TimeFormatShort, dateStrings[1])
 
+		// if failed to generate timestamp values, error out
 		if startErr != nil || endErr != nil {
 			panic("Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
 		}
-		fmt.Printf("will run through dates %s through %s", startTime.Local(), endTime.Local())
 
+		// try to create output directory.
 		resolvedDir, e := filepath.Abs(outputDir)
 		if e != nil {
 			panic("fatal error: could not resolve relative path in user provided input")
@@ -66,6 +68,9 @@ where my_script.py has the following required syntax:
 		if e != nil {
 			panic("error" + e.Error())
 		}
+
+		fmt.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
+		fmt.Printf("Output Directory:\t%s\n", resolvedDir)
 	},
 }
 
