@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -38,6 +39,11 @@ var logType string   // type of log (rdp, ftp, etc)
 // calculated start time and end time values
 var startTime time.Time
 var endTime time.Time
+
+type scriptContext struct {
+	logTime time.Time
+	logPath string
+}
 
 // parallelCmd represents the parallel command
 var parallelCmd = &cobra.Command{
@@ -133,12 +139,62 @@ where my_script.py has the following required syntax:
 			cmd.Printf("created dir %s\n", resolvedDir)
 		}
 
+		var wgAll sync.WaitGroup
+
 		// Continue, so lets start parsing
-		curDate := startTime
+		curDate := startTime.Truncate(24 * time.Hour) // start at this date, at 00:00:00
+		curTime := startTime                          // start at this hour
+		// for each date
 		for curDate.Before(endTime) || curDate.Equal(endTime) {
-			cmd.Printf("%s/%04d-%02d-%02d/%s.%02d\n", resolvedLogDir, curDate.Year(), curDate.Month(), curDate.Day(), logType, curDate.Hour())
-			curDate = curDate.Add(time.Hour)
+			// decide the output file for this day
+			// outputFile := filepath.Join(
+			// 	outputDir,
+			// 	fmt.Sprintf("%s-%d-%d-%d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+			// )
+			var wgDate sync.WaitGroup
+			// for each hour of that date, excluding the last date where we may end early.
+			for curTime.Before(curDate.AddDate(0, 0, 1)) && (curTime.Before(endTime) || curTime.Equal(endTime)) {
+				// find all input files that match this hour
+				inputFileGlob := fmt.Sprintf("%s/%04d-%02d-%02d/%s.%02d*", resolvedLogDir, curTime.Year(), curTime.Month(), curTime.Day(), logType, curTime.Hour())
+				logFileMatches, e := filepath.Glob(inputFileGlob)
+				if e != nil {
+					cmd.PrintErrln(e)
+					return
+				}
+
+				// for every found log file, run the script.
+				for _, logFile := range logFileMatches {
+					outputFileTemp := filepath.Join(
+						outputDir,
+						filepath.Base(logFile)+".json",
+					)
+					cmd.Printf("queing: %s -> %s\n", logFile, outputFileTemp)
+					wgDate.Add(1)
+					// TODO: go routine:
+					//	-	run script over logfile.
+					//	-	output to temp file.
+					//	- 	exit.
+				}
+				curTime = curTime.Add(time.Hour)
+			}
+
+			// wait for all date's to finish each log and then for them to concat into a single file.
+			wgAll.Add(1)
+			// TODO: go routine:
+			//	-	wait forall wgDate.
+			//  -	concat all temp files into one file.
+			//	-	clean up temp files.
+			//	-	end routine.
+
+			curDate = curDate.AddDate(0, 0, 1)
 		}
+
+		// wait for each day's go routine to finish. When done, exit!
+		cmd.Println("All routines queued. Waiting for them to finish...")
+		wgAll.Wait()
+
+		cmd.Printf("Complete. Output: %s\n", outputDir)
+		return
 	},
 }
 
