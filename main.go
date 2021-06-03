@@ -22,7 +22,7 @@ func main() {
 			panic(fmt.Errorf("No config file present. Please add one to /etc/nagini or ~/.config/nagini"))
 		} else {
 			// Config file was found but another error was produced
-			panic(fmt.Errorf("Unexpected Error: ", err))
+			panic(fmt.Errorf("Unexpected Error: %s", err))
 		}
 	}
 	cmd.Execute()
