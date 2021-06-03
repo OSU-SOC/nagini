@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -104,6 +105,12 @@ where my_script.py has the following required syntax:
 			return
 		}
 
+		_, e = exec.LookPath(scriptPath)
+		if e != nil {
+			cmd.PrintErrf("error: script '%s' exists but is not marked as an executable.\n", scriptPath)
+			return
+		}
+
 		// list params
 
 		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
@@ -174,10 +181,15 @@ where my_script.py has the following required syntax:
 					// the date know it is done.
 					go func(logFile string, outputFileTemp string, wgDate *sync.WaitGroup) {
 						cmd.Printf("queued: %s -> %s\n", logFile, outputFileTemp)
+
 						// TODO:
 						//	-	run script over logfile.
-						time.Sleep(time.Second)
 						//	-	output to temp file.
+						runErr := exec.Command(scriptPath, logFile, outputFileTemp).Run()
+						if runErr != nil {
+							cmd.PrintErrln(runErr)
+						}
+
 						defer wgDate.Done()
 					}(logFile, outputFileTemp, &wgDate)
 				}
@@ -191,10 +203,11 @@ where my_script.py has the following required syntax:
 				// wait for all log files for this date to finish.
 				wgDate.Wait()
 				cmd.Printf("All logs for %s finished. Concatinating...\n", curDate.Format(lib.TimeFormatDate))
+
 				// TODO:
 				//  -	concat all temp files into one file.
 				//	-	clean up temp files.
-				time.Sleep(time.Second)
+
 				// let our command know this date is done.
 				cmd.Printf("Complete: %s\n", curDate.Format(lib.TimeFormatDate))
 				defer wgAll.Done()
