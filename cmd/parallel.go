@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 var threads uint     // number of threads to run
 var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
+var logDir string    // directory containing all zeek logs
 
 // calculated start time and end time values
 var startTime time.Time
@@ -38,17 +40,17 @@ var endTime time.Time
 
 // parallelCmd represents the parallel command
 var parallelCmd = &cobra.Command{
-	Use:   "parallel",
+	Use:   "parallel [log type] [shell script]",
 	Short: "Legacy parallel for backwards compatibility with old parallel.py.",
 	Long: `Legacy parallel for backwards compatibility with old parallel.py.
 
 Example:
-	nagini parallel -t 8 my_script.py 
+	nagini parallel -t 8 rdp my_script.py 
 
 where my_script.py has the following required syntax:
 	./my_script.py [input file] [output file]
 `,
-	Args: cobra.MinimumNArgs(1), // 1 argument: script to run
+	Args: cobra.ExactArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
 		// build time range timestamps
 		var dateStrings = strings.Split(timeRange, "-")
@@ -57,21 +59,55 @@ where my_script.py has the following required syntax:
 
 		// if failed to generate timestamp values, error out
 		if startErr != nil || endErr != nil {
-			panic("Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
+			cmd.PrintErrln("error: Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
+			return
 		}
 
-		// try to create output directory.
+		// try to resolve output directory, see if it is valid input.
 		resolvedDir, e := filepath.Abs(outputDir)
 		if e != nil {
-			panic("fatal error: could not resolve relative path in user provided input")
+			cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+			return
 		}
 
-		fmt.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
-		fmt.Printf("Output Directory:\t%s\n\n", resolvedDir)
+		// try to resolve zeek log dir and see if exists and is real dir.
+		resolvedLogDir, e := filepath.Abs(logDir)
+		if e != nil {
+			cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+			return
+		}
+		logDirInfo, e := os.Stat(resolvedLogDir)
+		if os.IsNotExist(e) || !logDirInfo.IsDir() {
+			cmd.PrintErrf("error: invalid Zeek log directory %s, either does not exist or is not a directory.\n", resolvedLogDir)
+			return
+		}
+
+		// try to resolve script, see if it exists.
+		scriptPath, e := filepath.Abs(args[1])
+		if e != nil {
+			cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+			return
+		}
+
+		// check to see if script file exists.
+		_, e = os.Stat(scriptPath)
+		if os.IsNotExist(e) {
+			cmd.PrintErrf("error: script '%s' does not exist.\n", scriptPath)
+			return
+		}
+
+		// list params
+
+		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
+		cmd.Printf("Log Type:\t\t%s\n", args[0])
+		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
+		cmd.Printf("Script to Run:\t\t%s\n", scriptPath)
+		cmd.Printf("Threads:\t\t%d\n", threads)
+		cmd.Printf("Output Directory:\t%s\n\n", resolvedDir)
 
 		// prompt if continue
 		var start int
-		startMenu := wmenu.NewMenu("Start?")
+		startMenu := wmenu.NewMenu("Continue?")
 		startMenu.IsYesNo(0)
 		startMenu.LoopOnInvalid()
 		startMenu.Action(func(opts []wmenu.Opt) error {
@@ -80,7 +116,8 @@ where my_script.py has the following required syntax:
 		})
 		e = startMenu.Run()
 		if e != nil {
-			panic(e)
+			cmd.PrintErrln(e)
+			return
 		}
 
 		// if start is no, do not continue
@@ -89,15 +126,14 @@ where my_script.py has the following required syntax:
 		}
 		e = lib.TryCreateDir(resolvedDir)
 		if e != nil {
-			panic(e)
+			cmd.PrintErrln(e)
 		} else {
-			fmt.Printf("created dir %s\n", resolvedDir)
+			cmd.Printf("created dir %s\n", resolvedDir)
 		}
 	},
 }
 
 func init() {
-
 	rootCmd.AddCommand(parallelCmd)
 
 	// Add flags
@@ -125,5 +161,10 @@ func init() {
 	parallelCmd.PersistentFlags().StringVarP(&outputDir, "outdir", "o",
 		defaultPath,
 		"filtered logs output directory",
+	)
+
+	parallelCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
+		filepath.Join("/", "opt", "zeek", "logs"),
+		"Zeek log directory",
 	)
 }
