@@ -135,8 +135,8 @@ where my_script.py has the following required syntax:
 
 		// Continue, so lets start parsing
 		curDate := startTime
-		for curDate.Before(endTime) {
-			cmd.Printf("%s/%d-%d-%d/%s.%d\n", resolvedLogDir, curDate.Year(), curDate.Month(), curDate.Day(), logType, curDate.Hour())
+		for curDate.Before(endTime) || curDate.Equal(endTime) {
+			cmd.Printf("%s/%04d-%02d-%02d/%s.%02d\n", resolvedLogDir, curDate.Year(), curDate.Month(), curDate.Day(), logType, curDate.Hour())
 			curDate = curDate.Add(time.Hour)
 		}
 	},
