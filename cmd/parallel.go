@@ -16,10 +16,13 @@ limitations under the License.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +34,6 @@ import (
 )
 
 // args
-var threads uint     // number of threads to run
 var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
 var logDir string    // directory containing all zeek logs
@@ -149,15 +151,17 @@ where my_script.py has the following required syntax:
 		var wgAll sync.WaitGroup
 
 		// Continue, so lets start parsing
+
+		// set proc limit
+		runtime.GOMAXPROCS(threads)
+
+		// time iterators
 		curDate := startTime.Truncate(24 * time.Hour) // start at this date, at 00:00:00
 		curTime := startTime                          // start at this hour
+
 		// for each date
 		for curDate.Before(endTime) || curDate.Equal(endTime) {
-			// decide the output file for this day
-			// outputFile := filepath.Join(
-			// 	outputDir,
-			// 	fmt.Sprintf("%s-%d-%d-%d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
-			// )
+
 			var wgDate sync.WaitGroup
 			// for each hour of that date, excluding the last date where we may end early.
 			for curTime.Before(curDate.AddDate(0, 0, 1)) && (curTime.Before(endTime) || curTime.Equal(endTime)) {
@@ -166,14 +170,14 @@ where my_script.py has the following required syntax:
 				logFileMatches, e := filepath.Glob(inputFileGlob)
 				if e != nil {
 					cmd.PrintErrln(e)
-					return
+					continue
 				}
 
 				// for every found log file, run the script.
 				for _, logFile := range logFileMatches {
 					outputFileTemp := filepath.Join(
 						outputDir,
-						filepath.Base(logFile)+".json",
+						curDate.Format(lib.TimeFormatDateNum)+filepath.Base(logFile)+".json",
 					)
 					wgDate.Add(1)
 
@@ -198,13 +202,67 @@ where my_script.py has the following required syntax:
 			wgAll.Add(1)
 
 			go func(curDate time.Time, wgAll *sync.WaitGroup) {
+				outputFile := filepath.Join(
+					outputDir,
+					fmt.Sprintf("%s-%d-%d-%d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+				)
 				// wait for all log files for this date to finish.
 				wgDate.Wait()
-				cmd.Printf("All logs for %s finished. Concatinating...\n", curDate.Format(lib.TimeFormatDate))
+				cmd.Printf("All logs for %s finished. Concatinating into '%s'...\n", curDate.Format(lib.TimeFormatDate), outputFile)
 
-				// TODO:
-				//  -	concat all temp files into one file.
-				//	-	clean up temp files.
+				// get list of all temporary files we generated
+				tempOutputMatches, e := filepath.Glob(
+					filepath.Join(
+						outputDir,
+						curDate.Format(lib.TimeFormatDateNum)+logType+"*",
+					),
+				)
+
+				// if there was an error, don't concat.
+				if e != nil {
+					cmd.PrintErrln(e)
+					cmd.PrintErrf("FAILED: %s\n", curDate.Format(lib.TimeFormatDate))
+				} else if len(tempOutputMatches) == 0 {
+					cmd.Printf("No matches for date %s. Skipping.\n", curDate.Format(lib.TimeFormatDate))
+				} else {
+
+					// try to create outputFIle
+					outFd, fcErr := os.Create(outputFile)
+					if fcErr != nil {
+						cmd.PrintErrln(e)
+						cmd.PrintErrf("error: could not create final output file '%s'\n", outputFile)
+					}
+
+					// no error. Sort alphabetically (therefore in time order)
+					sort.Strings(tempOutputMatches)
+
+					// for every temp file we found, concat together.
+					for _, tempFile := range tempOutputMatches {
+						cmd.Println(tempFile)
+						tempFd, err := os.Open(tempFile)
+						if err != nil {
+							cmd.PrintErrln(e)
+							cmd.PrintErrf("error: could not read temp file '%s'\n", tempFile)
+							continue
+						}
+
+						// read temp file and write to final output file
+						scanner := bufio.NewScanner(tempFd)
+						for scanner.Scan() {
+							outFd.WriteString(scanner.Text() + "\n")
+						}
+
+						// close temp file as we no longer need it.
+						tempFd.Close()
+
+						err = os.Remove(tempFile)
+						if err != nil {
+							cmd.PrintErrf("error: could not remove temp file '%s'\n", tempFile)
+						}
+					}
+
+					outFd.Close()
+				}
 
 				// let our command know this date is done.
 				cmd.Printf("Complete: %s\n", curDate.Format(lib.TimeFormatDate))
@@ -227,9 +285,6 @@ func init() {
 	rootCmd.AddCommand(parallelCmd)
 
 	// Add flags
-
-	// threads
-	parallelCmd.PersistentFlags().UintVarP(&threads, "threads", "t", 1, "Number of threads to run in parallel")
 
 	// time range to parse
 	parallelCmd.PersistentFlags().StringVarP(

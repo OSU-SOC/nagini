@@ -6,4 +6,5 @@ const (
 	TimeFormatLongNum = "20060102:15:04:05.000"
 	TimeFormatHuman   = "2006/01/02 15:04:05"
 	TimeFormatDate    = "2006/01/02"
+	TimeFormatDateNum = "2006_01_02_"
 )

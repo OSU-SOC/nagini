@@ -4,11 +4,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var threads int // number of threads to run
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "nagini",
 	Short: "Pull and filter logs to a subset for easier parsing.",
-	Long: `Pull and filter logs to a subset for easier parsing.`,
+	Long:  `Pull and filter logs to a subset for easier parsing.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -21,4 +23,7 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
+	// threads
+	parallelCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 1, "Number of threads to run in parallel")
+
 }
