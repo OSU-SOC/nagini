@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +25,13 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	// threads
-	parallelCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 1, "Number of threads to run in parallel")
 
+	// threads
+	parallelCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 8, "Number of threads to run in parallel")
+
+	// default zeek dir
+	parallelCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
+		filepath.Join("/", "data", "zeek", "logs"),
+		"Zeek log directory",
+	)
 }

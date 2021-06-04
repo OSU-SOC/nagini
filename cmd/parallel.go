@@ -307,9 +307,4 @@ func init() {
 		defaultPath,
 		"filtered logs output directory",
 	)
-
-	parallelCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
-		filepath.Join("/", "opt", "zeek", "logs"),
-		"Zeek log directory",
-	)
 }
