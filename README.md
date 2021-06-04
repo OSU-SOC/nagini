@@ -18,6 +18,13 @@ nagini log [config YAML] [flags]
 ```
 ## Examples
 _TODO_
+
+## Building for Centos 7
+
+1. `cd ./build/centos7`
+2. `./build.sh`
+3. `nagini` binary will be in build/centos7/output
+
 ## Running from Repo
 1. Clone repo
 2. Run `--help` flag to see available options. (_TODO: Add better info about command options_)
