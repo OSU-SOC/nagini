@@ -204,7 +204,7 @@ where my_script.py has the following required syntax:
 			go func(curDate time.Time, wgAll *sync.WaitGroup) {
 				outputFile := filepath.Join(
 					outputDir,
-					fmt.Sprintf("%s-%d-%d-%d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+					fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
 				)
 				// wait for all log files for this date to finish.
 				wgDate.Wait()
