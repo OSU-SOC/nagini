@@ -1,13 +1,20 @@
 package cmd
 
 import (
+	"io"
+	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
-var threads int  // number of threads to run
-var verbose bool // verbose
+// args
+var threads int // number of threads to run
+var verbose int // verbose
+
+// global vars
+var debugLog *log.Logger
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -36,5 +43,11 @@ func init() {
 		"Zeek log directory",
 	)
 
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose logging")
+	rootCmd.PersistentFlags().CountVarP(&verbose, "verbose", "v", "enable verbose logging")
+	// set up logger based on verbosity
+	if verbose > 0 {
+		debugLog = log.New(os.Stdout, "", log.LstdFlags)
+	} else {
+		debugLog = log.New(io.Discard, "", 0)
+	}
 }

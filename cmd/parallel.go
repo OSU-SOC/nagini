@@ -1,5 +1,5 @@
 /*
-Copyright © 2021 NAME HERE <EMAIL ADDRESS>
+Copyright © 2021 Drew S. Ortega <DrewSOrtega@pm.me>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,15 +16,12 @@ limitations under the License.
 package cmd
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,14 +30,12 @@ import (
 	"github.com/spf13/cobra"
 
 	lib "github.com/OSU-SOC/nagini/lib"
-	wmenu "gopkg.in/dixonwille/wmenu.v4"
 )
 
 // args
 var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
 var logDir string    // directory containing all zeek logs
-var logType string   // type of log (rdp, ftp, etc)
 
 // calculated start time and end time values
 var startTime time.Time
@@ -48,11 +43,6 @@ var endTime time.Time
 
 // other
 var taskCount int // hold count of goroutines to wait on
-
-type scriptContext struct {
-	logTime time.Time
-	logPath string
-}
 
 // parallelCmd represents the parallel command
 var parallelCmd = &cobra.Command{
@@ -68,19 +58,9 @@ where my_script.py has the following required syntax:
 `,
 	Args: cobra.ExactArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
-		var debugLog *log.Logger
-		if verbose {
-			debugLog = log.New(os.Stdout, "", log.LstdFlags)
-		} else {
-			debugLog = log.New(io.Discard, "", 0)
-		}
-
-		taskCount := 0
-		logType = args[0]
-		scriptArg := args[1]
 
 		// parse params and args
-		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParams(cmd, logType, scriptArg)
+		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParams(cmd, args[0], args[1])
 
 		// list params
 		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
@@ -91,58 +71,40 @@ where my_script.py has the following required syntax:
 		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 
 		// prompt if continue
-		var start int
-		startMenu := wmenu.NewMenu("Continue?")
-		startMenu.IsYesNo(0)
-		startMenu.LoopOnInvalid()
-		startMenu.Action(func(opts []wmenu.Opt) error {
-			start = opts[0].ID
-			return nil
-		})
-		e := startMenu.Run()
-		if e != nil {
-			cmd.PrintErrln(e)
-			return
-		}
-		if start == 1 {
+		if !lib.WaitForConfirm(cmd) {
 			// if start is no, do not continue
 			return
 		}
-		cmd.Println()
 
 		// The response was yes- continue.
-		e = lib.TryCreateDir(resolvedOutDir)
+
+		// create the output directory.
+		e := lib.TryCreateDir(resolvedOutDir)
 		if e != nil {
 			cmd.PrintErrln(e)
 		} else {
 			debugLog.Printf("created dir %s\n", resolvedOutDir)
 		}
 
-		var wgAll sync.WaitGroup
-
-		// set proc limit
+		// set parallel routine thread limit
 		runtime.GOMAXPROCS(threads)
 
 		// time iterators
 		curDate := startTime.Truncate(24 * time.Hour) // start at this date, at 00:00:00
 		curTime := startTime                          // start at this hour
 
-		// progress bars
+		// progress bars init
 		dayCount := int(endTime.Round(time.Hour*24).Sub(startTime.Truncate(time.Hour*24)).Hours() / 24.0) // calculate total number of days
-		dayBar := pb.New(dayCount)
-		dayBar.BarStart = "Days Complete:     ["
-		dayBar.ShowPercent = false
-		taskBar := pb.New(taskCount)
-		taskBar.BarStart = "Log Parses Complete: ["
-		barPool, err := pb.StartPool(taskBar, dayBar)
-		if err != nil {
-			debugLog.Println("ERROR: Failed to start progess bar.")
-		}
+		barPool, dayBar, taskBar := lib.InitBars(dayCount, taskCount, debugLog)
+
+		// holds wait interface for all routines to finish.
+		var wgAll sync.WaitGroup
 
 		// for each date
 		for curDate.Before(endTime) || curDate.Equal(endTime) {
-
+			// holds wait interface for all routines of this particular day.
 			var wgDate sync.WaitGroup
+			var tempFiles []string
 			// for each hour of that date, excluding the last date where we may end early.
 			for curTime.Before(curDate.AddDate(0, 0, 1)) && (curTime.Before(endTime) || curTime.Equal(endTime)) {
 				// find all input files that match this hour
@@ -160,30 +122,17 @@ where my_script.py has the following required syntax:
 				for _, logFile := range logFileMatches {
 					outputFileTemp := filepath.Join(
 						outputDir,
-						curDate.Format(lib.TimeFormatDateNum)+filepath.Base(logFile)+".json",
+						curTime.Format(lib.TimeFormatDateNum)+filepath.Base(logFile)+".json",
 					)
-					wgDate.Add(1)
-
-					// start concurrent method. Look through this log file, write to temp file, and then let
-					// the date know it is done.
-					go func(logFile string, outputFileTemp string, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
-						debugLog.Printf("queued: %s -> %s\n", logFile, outputFileTemp)
-
-						// run script, which should handle the file writing itself currently.
-						runErr := exec.Command(scriptPath, logFile, outputFileTemp).Run()
-						if runErr != nil {
-							debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), e)
-						}
-						defer wgDate.Done()
-						defer taskBar.Increment()
-					}(logFile, outputFileTemp, &wgDate, taskBar)
+					tempFiles = append(tempFiles, outputFileTemp)
+					runScript(scriptPath, logFile, outputFileTemp, curTime, &wgDate, taskBar)
 				}
 				curTime = curTime.Add(time.Hour)
 			}
 
 			// wait for all date's to finish each log and then for them to concat into a single file.
 			wgAll.Add(1)
-			go outputDateParallel(debugLog, curDate, &wgDate, &wgAll, dayBar)
+			go outputDateParallel(logType, tempFiles, debugLog, curDate, &wgDate, &wgAll, dayBar)
 
 			// iterate to next date
 			curDate = curDate.AddDate(0, 0, 1)
@@ -202,6 +151,9 @@ where my_script.py has the following required syntax:
 
 func init() {
 	rootCmd.AddCommand(parallelCmd)
+
+	// init vars
+	taskCount = 0
 
 	// Add flags
 
@@ -226,8 +178,10 @@ func init() {
 		defaultPath,
 		"filtered logs output directory",
 	)
+
 }
 
+// takes args and params, does error checking, and then produces useful variables.
 func parseParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, scriptPath string) {
 	// build time range timestamps
 	var dateStrings = strings.Split(timeRange, "-")
@@ -279,13 +233,14 @@ func parseParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (s
 		os.Exit(1)
 	}
 
+	// TODO: add logType verification
 	logType = logTypeArg
 
 	return
 }
 
 // Waits until the given sync group is done. When it finishes, concats all files together of that particular date, and then lets the global sync group know it has finished.
-func outputDateParallel(logger *log.Logger, curDate time.Time, wgDate *sync.WaitGroup, wgAll *sync.WaitGroup, bar *pb.ProgressBar) {
+func outputDateParallel(logType string, inputFiles []string, logger *log.Logger, curDate time.Time, wgDate *sync.WaitGroup, wgAll *sync.WaitGroup, bar *pb.ProgressBar) {
 	outputFile := filepath.Join(
 		outputDir,
 		fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
@@ -298,25 +253,14 @@ func outputDateParallel(logger *log.Logger, curDate time.Time, wgDate *sync.Wait
 
 	logger.Printf("All logs for %s finished. Concatinating into '%s'\n", curDate.Format(lib.TimeFormatDate), outputFile)
 
-	// Get list of all temporary files we generated.
-	tempOutputMatches, e := filepath.Glob(
-		filepath.Join(
-			outputDir,
-			curDate.Format(lib.TimeFormatDateNum)+logType+"*",
-		),
-	)
-
 	// keep track of concat failures to alert the program.
 	failure := false
 
-	// if there was an error, don't concat.
-	if e != nil {
-		logger.Println("ERROR: ", e)
-		failure = true
-	} else if len(tempOutputMatches) == 0 {
+	// if no input files, ignore.
+	if len(inputFiles) == 0 {
 		logger.Printf("WARN: No matches for date %s. Skipping.\n", curDate.Format(lib.TimeFormatDate))
 	} else {
-		e = concatFiles(logger, tempOutputMatches, outputFile, true)
+		e := lib.ConcatFiles(logger, inputFiles, outputFile, true)
 		if e != nil {
 			logger.Println("ERROR: ", e)
 			failure = true
@@ -331,43 +275,21 @@ func outputDateParallel(logger *log.Logger, curDate time.Time, wgDate *sync.Wait
 	}
 }
 
-// takes a list of files, sorts them and concats them into a single file. if deleteInputAfterRead, also deletes the input after use.
-func concatFiles(logger *log.Logger, inputFiles []string, outputFile string, deleteInputAfterRead bool) (e error) {
-	// try to create outputFile
-	outFd, fcErr := os.Create(outputFile)
-	if fcErr != nil {
-		return fcErr
-	}
+// takes input file, script, and output file, and runs script in parallel, syncing given wait group.
+func runScript(scriptPath string, logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
+	wgDate.Add(1)
 
-	// no error. Sort alphabetically (therefore in time order)
-	sort.Strings(inputFiles)
+	// start concurrent method. Look through this log file, write to temp file, and then let
+	// the date know it is done.
+	go func(logFile string, outputFile string, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
+		debugLog.Printf("queued: %s -> %s\n", logFile, outputFile)
 
-	// for every input file, concat together.
-	for _, inputFile := range inputFiles {
-		logger.Printf("Concatting %s into %s\n", inputFile, outputFile)
-		tempFd, err := os.Open(inputFile)
-		if err != nil {
-			logger.Printf("ERROR: could not read file '%s': %s\n", inputFile, err)
-			continue
+		// run script, which should handle the file writing itself currently.
+		runErr := exec.Command(scriptPath, logFile, outputFile).Run()
+		if runErr != nil {
+			debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), runErr)
 		}
-
-		// read temp file and write to final output file
-		scanner := bufio.NewScanner(tempFd)
-		for scanner.Scan() {
-			outFd.WriteString(scanner.Text() + "\n")
-		}
-
-		// close temp file as we no longer need it.
-		tempFd.Close()
-
-		// if delete flag is set to true, delete the input file.
-		if deleteInputAfterRead {
-			err = os.Remove(inputFile)
-			if err != nil {
-				logger.Printf("ERROR: could not remove temp file '%s': %s\n", fcErr, err)
-			}
-		}
-	}
-
-	return outFd.Close()
+		defer wgDate.Done()
+		defer taskBar.Increment()
+	}(logFile, outputFile, wgDate, taskBar)
 }
