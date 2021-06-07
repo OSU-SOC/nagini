@@ -6,7 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var threads int // number of threads to run
+var threads int  // number of threads to run
+var verbose bool // verbose
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -27,11 +28,13 @@ func init() {
 	// will be global for your application.
 
 	// threads
-	parallelCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 8, "Number of threads to run in parallel")
+	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 8, "Number of threads to run in parallel")
 
 	// default zeek dir
-	parallelCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
+	rootCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
 		filepath.Join("/", "data", "zeek", "logs"),
 		"Zeek log directory",
 	)
+
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose logging")
 }
