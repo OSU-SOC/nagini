@@ -114,7 +114,7 @@ where my_script.py has the following required syntax:
 					debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), e)
 					continue
 				}
-				taskCount += len(logFileMatches) // set total number of found log files, plus one for the concatination step.
+				taskCount += len(logFileMatches) // set total number of found log files, plus one for the concatenation step.
 				taskBar.SetTotal(taskCount)      // set new total on bar to include found log files
 				taskBar.Update()
 
