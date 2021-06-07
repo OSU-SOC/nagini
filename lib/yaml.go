@@ -83,6 +83,7 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 					if err != nil {
 						panic(fmt.Errorf("No config file present, and failed to write a default. Please manually add one to /etc/nagini or ~/.config/nagini: %s", err))
 					} else {
+						fmt.Printf("WARN: created a new config file at %s/.config/nagini/config.yaml\n", homedir)
 						readConfig = true
 					}
 				}

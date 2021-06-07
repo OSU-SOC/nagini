@@ -19,7 +19,7 @@ var logCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(logCmd)
+	// rootCmd.AddCommand(logCmd)
 
 	// Here you will define your flags and configuration settings.
 
