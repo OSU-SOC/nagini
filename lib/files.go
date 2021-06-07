@@ -11,7 +11,11 @@ import (
 	"sort"
 )
 
-func TryCreateDir(dir string) (err error) {
+func TryCreateDir(dir string, empty bool) (err error) {
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return errors.New(fmt.Sprintf("failed to resolve path %s.", dir))
+	}
 	dirInfo, err := os.Stat(dir)
 	if os.IsNotExist(err) {
 		// directory exists. See if permissions to use and is non-empty.
@@ -24,24 +28,25 @@ func TryCreateDir(dir string) (err error) {
 			return err
 		}
 
-		err = os.Mkdir(dir, 0775)
+		err = os.Mkdir(dir, 0665)
 
 	} else if !dirInfo.IsDir() {
 		// if exists but is not a directory, error out.
-		err = errors.New("cannot create output directory: file of same name already exists.")
+		err = errors.New("cannot create output directory: file of same name already exists, and is not a directory.")
 	} else {
 		// directory exists. See if permissions to use and is non-empty.
 		f, fErr := os.OpenFile(dir, os.O_RDWR, 0)
 		if fErr != nil {
 			// failed to write to directory, use this error
-			err = errors.New("directory exists. Failed to open for write.")
 			return err
 		}
 		defer f.Close()
 
-		_, dirErr := f.Readdirnames(1)
-		if dirErr != io.EOF {
-			err = errors.New("cannot use specified directory: directory exists and is non-empty.")
+		if empty {
+			_, dirErr := f.Readdirnames(1)
+			if dirErr != io.EOF {
+				err = errors.New("cannot use specified directory: directory exists and is non-empty.")
+			}
 		}
 	}
 

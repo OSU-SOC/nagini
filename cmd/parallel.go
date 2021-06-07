@@ -79,7 +79,7 @@ where my_script.py has the following required syntax:
 		// The response was yes- continue.
 
 		// create the output directory.
-		e := lib.TryCreateDir(resolvedOutDir)
+		e := lib.TryCreateDir(resolvedOutDir, true)
 		if e != nil {
 			cmd.PrintErrln(e)
 		} else {

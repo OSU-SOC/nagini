@@ -4,9 +4,10 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 
+	lib "github.com/OSU-SOC/nagini/lib"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // args
@@ -15,6 +16,7 @@ var verbose int // verbose
 
 // global vars
 var debugLog *log.Logger
+var globalConfig *viper.Viper
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -34,12 +36,17 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
+	// Set up global configuration path.
+	globalConfig := lib.ReadGlobalConfig()
+
+	// read flags
+
 	// threads
-	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "t", 8, "Number of threads to run in parallel")
+	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "t", globalConfig.GetInt("default_thread_count"), "Number of threads to run in parallel")
 
 	// default zeek dir
 	rootCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
-		filepath.Join("/", "data", "zeek", "logs"),
+		globalConfig.GetString("zeek_log_dir"),
 		"Zeek log directory",
 	)
 
