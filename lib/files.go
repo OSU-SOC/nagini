@@ -37,7 +37,7 @@ func TryCreateDir(dir string, empty bool) (err error) {
 			return err
 		}
 
-		err = os.Mkdir(dir, 0665)
+		err = os.Mkdir(dir, 0775)
 
 	} else if !dirInfo.IsDir() {
 		// if exists but is not a directory, error out.
