@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	lib "github.com/OSU-SOC/nagini/lib"
 	"github.com/spf13/cobra"
@@ -11,12 +12,22 @@ import (
 )
 
 // args
-var threads int // number of threads to run
-var verbose int // verbose
+var threads int      // number of threads to run
+var verbose int      // verbose
+var timeRange string // string format of time range to go over
+var outputDir string // directory to output logs
+var logDir string    // directory containing all zeek logs
+
+// calculated start time and end time values
+var startTime time.Time
+var endTime time.Time
 
 // global vars
 var debugLog *log.Logger
 var globalConfig *viper.Viper
+
+// other
+var taskCount int // hold count of goroutines to wait on
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{

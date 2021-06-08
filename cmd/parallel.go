@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,18 +30,6 @@ import (
 
 	lib "github.com/OSU-SOC/nagini/lib"
 )
-
-// args
-var timeRange string // string format of time range to go over
-var outputDir string // directory to output logs
-var logDir string    // directory containing all zeek logs
-
-// calculated start time and end time values
-var startTime time.Time
-var endTime time.Time
-
-// other
-var taskCount int // hold count of goroutines to wait on
 
 // parallelCmd represents the parallel command
 var parallelCmd = &cobra.Command{
@@ -60,7 +47,7 @@ where my_script.py has the following required syntax:
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// parse params and args
-		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParams(cmd, args[0], args[1])
+		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParallelParams(cmd, args[0], args[1])
 
 		// list params
 		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
@@ -182,39 +169,11 @@ func init() {
 }
 
 // takes args and params, does error checking, and then produces useful variables.
-func parseParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, scriptPath string) {
-	// build time range timestamps
-	var dateStrings = strings.Split(timeRange, "-")
-	startTime, startErr := time.Parse(lib.TimeFormatShort, dateStrings[0])
-	endTime, endErr := time.Parse(lib.TimeFormatShort, dateStrings[1])
-
-	// if failed to generate timestamp values, error out
-	if startErr != nil || endErr != nil {
-		cmd.PrintErrln("error: Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
-		os.Exit(1)
-	}
-
-	// try to resolve output directory, see if it is valid input.
-	resolvedOutDir, e := filepath.Abs(outputDir)
-	if e != nil {
-		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
-		os.Exit(1)
-	}
-
-	// try to resolve zeek log dir and see if exists and is real dir.
-	resolvedLogDir, e = filepath.Abs(logDir)
-	if e != nil {
-		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
-		os.Exit(1)
-	}
-	logDirInfo, e := os.Stat(resolvedLogDir)
-	if os.IsNotExist(e) || !logDirInfo.IsDir() {
-		cmd.PrintErrf("error: invalid Zeek log directory %s, either does not exist or is not a directory.\n", resolvedLogDir)
-		os.Exit(1)
-	}
+func parseParallelParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, scriptPath string) {
+	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, timeRange, logDir, outputDir, logTypeArg)
 
 	// try to resolve script, see if it exists.
-	scriptPath, e = filepath.Abs(scriptPathArg)
+	scriptPath, e := filepath.Abs(scriptPathArg)
 	if e != nil {
 		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
 		os.Exit(1)
@@ -232,9 +191,6 @@ func parseParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (s
 		cmd.PrintErrf("error: script '%s' exists but is not marked as an executable.\n", scriptPath)
 		os.Exit(1)
 	}
-
-	// TODO: add logType verification
-	logType = logTypeArg
 
 	return
 }

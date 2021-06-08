@@ -9,8 +9,17 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
+// tries to create a directory at the given path.
+// the parent directory must already exist.
+// if the directory already exists, will check to make sure write permissions
+// - additionally, if the empty flag is set, then it will enforce that the
+//   directory is empty.
 func TryCreateDir(dir string, empty bool) (err error) {
 	dir, err = filepath.Abs(dir)
 	if err != nil {
@@ -92,4 +101,41 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 	}
 
 	return outFd.Close()
+}
+
+func ParseSharedArgs(cmd *cobra.Command, timeRange string, logDir string, outputDir string, logTypeArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string) {
+	// build time range timestamps
+	var dateStrings = strings.Split(timeRange, "-")
+	startTime, startErr := time.Parse(TimeFormatShort, dateStrings[0])
+	endTime, endErr := time.Parse(TimeFormatShort, dateStrings[1])
+
+	// if failed to generate timestamp values, error out
+	if startErr != nil || endErr != nil {
+		cmd.PrintErrln("error: Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
+		os.Exit(1)
+	}
+
+	// try to resolve output directory, see if it is valid input.
+	resolvedOutDir, e := filepath.Abs(outputDir)
+	if e != nil {
+		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+		os.Exit(1)
+	}
+
+	// try to resolve zeek log dir and see if exists and is real dir.
+	resolvedLogDir, e = filepath.Abs(logDir)
+	if e != nil {
+		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+		os.Exit(1)
+	}
+	logDirInfo, e := os.Stat(resolvedLogDir)
+	if os.IsNotExist(e) || !logDirInfo.IsDir() {
+		cmd.PrintErrf("error: invalid Zeek log directory %s, either does not exist or is not a directory.\n", resolvedLogDir)
+		os.Exit(1)
+	}
+
+	// TODO: add logType verification
+	logType = logTypeArg
+
+	return
 }
