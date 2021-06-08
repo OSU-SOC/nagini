@@ -16,7 +16,10 @@ limitations under the License.
 package cmd
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	pb "github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
 
 	lib "github.com/OSU-SOC/nagini/lib"
@@ -41,6 +45,12 @@ Example:
 `,
 	Args: cobra.MinimumNArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
+		// set up logger based on verbosity
+		if verbose == true {
+			debugLog = log.New(os.Stdout, "", log.LstdFlags)
+		} else {
+			debugLog = log.New(io.Discard, "", 0)
+		}
 
 		// parse params and args
 		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, targetCommand, targetCommandArgs := parseRunParams(cmd, args[0], args[1:])
@@ -68,6 +78,8 @@ Example:
 		} else {
 			debugLog.Printf("created dir %s\n", resolvedOutDir)
 		}
+
+		var outputFiles []string
 
 		// set parallel routine thread limit
 		runtime.GOMAXPROCS(threads)
@@ -108,14 +120,21 @@ Example:
 						curTime.Format(lib.TimeFormatDateNum)+filepath.Base(logFile)+".json",
 					)
 					tempFiles = append(tempFiles, outputFileTemp)
-					//runScript(targetCommand, logFile, outputFileTemp, curTime, &wgDate, taskBar)
+					runCommand(targetCommand, targetCommandArgs, logFile, outputFileTemp, curTime, &wgDate, taskBar)
 				}
 				curTime = curTime.Add(time.Hour)
 			}
 
 			// wait for all date's to finish each log and then for them to concat into a single file.
 			wgAll.Add(1)
-			go outputDateParallel(logType, tempFiles, debugLog, curDate, &wgDate, &wgAll, dayBar)
+
+			// determine output file and concat all temp files by date to it.
+			outputFile := filepath.Join(
+				outputDir,
+				fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+			)
+			outputFiles = append(outputFiles, outputFile)
+			go lib.ConcatFilesParallelByDate(logType, tempFiles, outputFile, outputDir, debugLog, curDate, &wgDate, &wgAll, dayBar)
 
 			// iterate to next date
 			curDate = curDate.AddDate(0, 0, 1)
@@ -125,6 +144,15 @@ Example:
 		debugLog.Println("All routines queued. Waiting for them to finish.")
 
 		wgAll.Wait()
+
+		if singleFile {
+			cmd.Println("Concat flag set. Concatting all output into a single output.json file.")
+			e = lib.ConcatFiles(debugLog, outputFiles, filepath.Join(outputDir, "output.json"), true, true)
+			if e != nil {
+				cmd.PrintErrln(e)
+			}
+		}
+
 		barPool.Stop()
 
 		cmd.Printf("\nComplete. Output: %s\n", outputDir)
@@ -199,4 +227,52 @@ func parseRunParams(cmd *cobra.Command, logTypeArg string, commandToRun []string
 
 	execArgs = commandToRun[1:]
 	return
+}
+
+// takes input file, script, and output file, and runs script in parallel, syncing given wait group.
+func runCommand(cmdPath string, cmdArgs []string, logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
+	wgDate.Add(1)
+
+	// start concurrent method. Look through this log file, write to temp file, and then let
+	// the date know it is done.
+	go func(logFile string, outputFile string, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
+		defer wgDate.Done()
+		defer taskBar.Increment()
+
+		debugLog.Printf("queued: %s -> %s\n", logFile, outputFile)
+
+		// open input file for reading as compressed
+		cmdInputCompressed, fileReadErr := os.Open(logFile)
+		if fileReadErr != nil {
+			fmt.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), fileReadErr)
+			return
+		}
+		defer cmdInputCompressed.Close()
+
+		// open input file for reading as compressed
+		cmdInput, fileReadZipErr := gzip.NewReader(cmdInputCompressed)
+		if fileReadZipErr != nil {
+			fmt.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), fileReadErr)
+			return
+		}
+		defer cmdInput.Close()
+
+		// open output file for writing
+		cmdOutput, fileWriteErr := os.Create(outputFile)
+		if fileWriteErr != nil {
+			fmt.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), fileWriteErr)
+			return
+		}
+		defer cmdOutput.Close()
+
+		// run script, which should handle the file writing itself currently.
+		cmdContext := exec.Command(cmdPath, cmdArgs...)
+		cmdContext.Stdin = cmdInput
+		cmdContext.Stdout = cmdOutput
+
+		runErr := cmdContext.Run()
+		if runErr != nil {
+			debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), runErr)
+		}
+	}(logFile, outputFile, wgDate, taskBar)
 }

@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
 )
 
@@ -62,8 +64,39 @@ func TryCreateDir(dir string, empty bool) (err error) {
 	return err
 }
 
+// Waits until the given sync group is done. When it finishes, concats all files together of that particular date, and then lets the global sync group know it has finished.
+func ConcatFilesParallelByDate(logType string, inputFiles []string, outputFile, outputDir string, logger *log.Logger, curDate time.Time, wgDate *sync.WaitGroup, wgAll *sync.WaitGroup, bar *pb.ProgressBar) {
+	// Wait for all log files for this date to finish.
+	wgDate.Wait()
+	defer wgAll.Done()
+	defer bar.Increment()
+
+	logger.Printf("All logs for %s finished. Concatinating into '%s'\n", curDate.Format(TimeFormatDate), outputFile)
+
+	// keep track of concat failures to alert the program.
+	failure := false
+
+	// if no input files, ignore.
+	if len(inputFiles) == 0 {
+		logger.Printf("WARN: No matches for date %s. Skipping.\n", curDate.Format(TimeFormatDate))
+	} else {
+		e := ConcatFiles(logger, inputFiles, outputFile, true, false)
+		if e != nil {
+			logger.Println("ERROR: ", e)
+			failure = true
+		}
+	}
+
+	// print whether or not we failed to concat the files together.
+	if failure {
+		logger.Printf("FAIL: %s\n", curDate.Format(TimeFormatDate))
+	} else {
+		logger.Printf("SUCCESS: %s\n", curDate.Format(TimeFormatDate))
+	}
+}
+
 // takes a list of files, sorts them and concats them into a single file. if deleteInputAfterRead, also deletes the input after use.
-func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, deleteInputAfterRead bool) (e error) {
+func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, deleteInputAfterRead bool, ignoreMissing bool) (e error) {
 	// try to create outputFile
 	outFd, fcErr := os.Create(outputFile)
 	if fcErr != nil {
@@ -75,12 +108,14 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 
 	// for every input file, concat together.
 	for _, inputFile := range inputFiles {
-		logger.Printf("Concatting %s into %s\n", inputFile, outputFile)
 		tempFd, err := os.Open(inputFile)
 		if err != nil {
-			logger.Printf("ERROR: could not read file '%s': %s\n", inputFile, err)
+			if !ignoreMissing {
+				logger.Printf("ERROR: could not read file '%s': %s\n", inputFile, err)
+			}
 			continue
 		}
+		logger.Printf("Concatting %s into %s\n", inputFile, outputFile)
 
 		// read temp file and write to final output file
 		scanner := bufio.NewScanner(tempFd)

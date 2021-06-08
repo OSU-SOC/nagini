@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -45,6 +46,12 @@ where my_script.py has the following required syntax:
 `,
 	Args: cobra.ExactArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
+		// set up logger based on verbosity
+		if verbose == true {
+			debugLog = log.New(os.Stdout, "", log.LstdFlags)
+		} else {
+			debugLog = log.New(io.Discard, "", 0)
+		}
 
 		// parse params and args
 		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParallelParams(cmd, args[0], args[1])
@@ -72,6 +79,8 @@ where my_script.py has the following required syntax:
 		} else {
 			debugLog.Printf("created dir %s\n", resolvedOutDir)
 		}
+
+		var outputFiles []string
 
 		// set parallel routine thread limit
 		runtime.GOMAXPROCS(threads)
@@ -119,7 +128,14 @@ where my_script.py has the following required syntax:
 
 			// wait for all date's to finish each log and then for them to concat into a single file.
 			wgAll.Add(1)
-			go outputDateParallel(logType, tempFiles, debugLog, curDate, &wgDate, &wgAll, dayBar)
+
+			// determine output file and concat all temp files by date to it.
+			outputFile := filepath.Join(
+				outputDir,
+				fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+			)
+			outputFiles = append(outputFiles, outputFile)
+			go lib.ConcatFilesParallelByDate(logType, tempFiles, outputFile, outputDir, debugLog, curDate, &wgDate, &wgAll, dayBar)
 
 			// iterate to next date
 			curDate = curDate.AddDate(0, 0, 1)
@@ -129,6 +145,15 @@ where my_script.py has the following required syntax:
 		debugLog.Println("All routines queued. Waiting for them to finish.")
 
 		wgAll.Wait()
+
+		if singleFile {
+			cmd.Println("Concat flag set. Concatting all output into a single output.json file.")
+			e = lib.ConcatFiles(debugLog, outputFiles, filepath.Join(outputDir, "output.json"), true, true)
+			if e != nil {
+				cmd.PrintErrln(e)
+			}
+		}
+
 		barPool.Stop()
 
 		cmd.Printf("\nComplete. Output: %s\n", outputDir)
@@ -195,42 +220,6 @@ func parseParallelParams(cmd *cobra.Command, logTypeArg string, scriptPathArg st
 	return
 }
 
-// Waits until the given sync group is done. When it finishes, concats all files together of that particular date, and then lets the global sync group know it has finished.
-func outputDateParallel(logType string, inputFiles []string, logger *log.Logger, curDate time.Time, wgDate *sync.WaitGroup, wgAll *sync.WaitGroup, bar *pb.ProgressBar) {
-	outputFile := filepath.Join(
-		outputDir,
-		fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
-	)
-
-	// Wait for all log files for this date to finish.
-	wgDate.Wait()
-	defer wgAll.Done()
-	defer bar.Increment()
-
-	logger.Printf("All logs for %s finished. Concatinating into '%s'\n", curDate.Format(lib.TimeFormatDate), outputFile)
-
-	// keep track of concat failures to alert the program.
-	failure := false
-
-	// if no input files, ignore.
-	if len(inputFiles) == 0 {
-		logger.Printf("WARN: No matches for date %s. Skipping.\n", curDate.Format(lib.TimeFormatDate))
-	} else {
-		e := lib.ConcatFiles(logger, inputFiles, outputFile, true)
-		if e != nil {
-			logger.Println("ERROR: ", e)
-			failure = true
-		}
-	}
-
-	// print whether or not we failed to concat the files together.
-	if failure {
-		logger.Printf("FAIL: %s\n", curDate.Format(lib.TimeFormatDate))
-	} else {
-		logger.Printf("SUCCESS: %s\n", curDate.Format(lib.TimeFormatDate))
-	}
-}
-
 // takes input file, script, and output file, and runs script in parallel, syncing given wait group.
 func runScript(scriptPath string, logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
 	wgDate.Add(1)
@@ -246,6 +235,6 @@ func runScript(scriptPath string, logFile string, outputFile string, curTime tim
 			debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), runErr)
 		}
 		defer wgDate.Done()
-		defer taskBar.Increment()
+		taskBar.Increment()
 	}(logFile, outputFile, wgDate, taskBar)
 }

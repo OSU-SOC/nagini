@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"io"
 	"log"
-	"os"
 	"time"
 
 	lib "github.com/OSU-SOC/nagini/lib"
@@ -13,10 +11,11 @@ import (
 
 // args
 var threads int      // number of threads to run
-var verbose int      // verbose
+var verbose bool     // verbose
 var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
 var logDir string    // directory containing all zeek logs
+var singleFile bool  // holds whether or not to concat into one file.
 
 // calculated start time and end time values
 var startTime time.Time
@@ -61,11 +60,7 @@ func init() {
 		"Zeek log directory",
 	)
 
-	rootCmd.PersistentFlags().CountVarP(&verbose, "verbose", "v", "enable verbose logging")
-	// set up logger based on verbosity
-	if verbose > 0 {
-		debugLog = log.New(os.Stdout, "", log.LstdFlags)
-	} else {
-		debugLog = log.New(io.Discard, "", 0)
-	}
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+
+	rootCmd.PersistentFlags().BoolVarP(&singleFile, "concat", "c", false, "concat all output to one file, rather than files for each date.")
 }
