@@ -139,6 +139,7 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 	return outFd.Close()
 }
 
+// parses and verifies arguments that are global to the root command.
 func ParseSharedArgs(cmd *cobra.Command, timeRange string, logDir string, outputDir string, logTypeArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string) {
 	// build time range timestamps
 	var dateStrings = strings.Split(timeRange, "-")

@@ -42,6 +42,8 @@ func ParseConfig(filepath string) (configData Config, err error) {
 	return configData, err
 }
 
+// takes a global config from /etc/nagini or ~/.config/nagini, reads in vars that are present,
+// and passes them as a viper config.
 func ReadGlobalConfig() (globalConfig *viper.Viper) {
 	globalConfig = viper.New()
 	globalConfig.SetConfigName("config")
@@ -100,6 +102,7 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 	return globalConfig
 }
 
+// TODO
 func GenRuntimeConfig(globalConfig *viper.Viper, cmd *cobra.Command) {
 
 }
