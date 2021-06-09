@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -173,4 +174,98 @@ func ParseSharedArgs(cmd *cobra.Command, timeRange string, logDir string, output
 	logType = logTypeArg
 
 	return
+}
+
+// takes a log type, time range, zeek log directory, thread information, and output directory info.
+// it then parses logs based on the logHandler and then outputs the files to the given directory, all parallelized.
+func ParseLogs(cmd *cobra.Command, logHandler func(string, string, time.Time, *sync.WaitGroup, *pb.ProgressBar), logger *log.Logger, startTime time.Time, endTime time.Time, logType string, resolvedLogDir string, resolvedOutDir string, threads int, singleFile bool) {
+	var taskCount = 0
+
+	// create the output directory.
+	e := TryCreateDir(resolvedOutDir, true)
+	if e != nil {
+		cmd.PrintErrln(e)
+	} else {
+		logger.Printf("created dir %s\n", resolvedOutDir)
+	}
+
+	var outputFiles []string
+
+	// set parallel routine thread limit
+	runtime.GOMAXPROCS(threads)
+
+	// time iterators
+	curDate := startTime.Truncate(24 * time.Hour) // start at this date, at 00:00:00
+	curTime := startTime                          // start at this hour
+
+	// progress bars init
+	dayCount := int(endTime.Round(time.Hour*24).Sub(startTime.Truncate(time.Hour*24)).Hours() / 24.0) // calculate total number of days
+	barPool, dayBar, taskBar := InitBars(dayCount, taskCount, logger)
+
+	// holds wait interface for all routines to finish.
+	var wgAll sync.WaitGroup
+
+	// for each date
+	for curDate.Before(endTime) || curDate.Equal(endTime) {
+		// holds wait interface for all routines of this particular day.
+		var wgDate sync.WaitGroup
+		var tempFiles []string
+		// for each hour of that date, excluding the last date where we may end early.
+		for curTime.Before(curDate.AddDate(0, 0, 1)) && (curTime.Before(endTime) || curTime.Equal(endTime)) {
+			// find all input files that match this hour
+			inputFileGlob := fmt.Sprintf("%s/%04d-%02d-%02d/%s.%02d*", resolvedLogDir, curTime.Year(), curTime.Month(), curTime.Day(), logType, curTime.Hour())
+			logFileMatches, e := filepath.Glob(inputFileGlob)
+			if e != nil {
+				logger.Printf("ERROR (%s): %s\n", curTime.Format(TimeFormatHuman), e)
+				continue
+			}
+			taskCount += len(logFileMatches) // set total number of found log files, plus one for the concatenation step.
+			taskBar.SetTotal(taskCount)      // set new total on bar to include found log files
+			taskBar.Update()
+
+			// for every found log file, run the script.
+			for _, logFile := range logFileMatches {
+				outputFileTemp := filepath.Join(
+					resolvedOutDir,
+					curTime.Format(TimeFormatDateNum)+filepath.Base(logFile)+".json",
+				)
+				tempFiles = append(tempFiles, outputFileTemp)
+
+				// handle logs based on given input of a log file and a place to output the data,
+				// also given the current hour we are looking at, a sync group to sync on, and a
+				// task bar to update.
+				logHandler(logFile, outputFileTemp, curTime, &wgDate, taskBar)
+			}
+			curTime = curTime.Add(time.Hour)
+		}
+
+		// wait for all date's to finish each log and then for them to concat into a single file.
+		wgAll.Add(1)
+
+		// determine output file and concat all temp files by date to it.
+		outputFile := filepath.Join(
+			resolvedOutDir,
+			fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
+		)
+		outputFiles = append(outputFiles, outputFile)
+		go ConcatFilesParallelByDate(logType, tempFiles, outputFile, resolvedOutDir, logger, curDate, &wgDate, &wgAll, dayBar)
+
+		// iterate to next date
+		curDate = curDate.AddDate(0, 0, 1)
+	}
+
+	// wait for each day's go routine to finish. When done, exit!
+	logger.Println("All routines queued. Waiting for them to finish.")
+
+	wgAll.Wait()
+
+	if singleFile {
+		cmd.Println("Concat flag set. Concatting all output into a single output.json file.")
+		e = ConcatFiles(logger, outputFiles, filepath.Join(resolvedOutDir, "output.json"), true, true)
+		if e != nil {
+			cmd.PrintErrln(e)
+		}
+	}
+
+	barPool.Stop()
 }

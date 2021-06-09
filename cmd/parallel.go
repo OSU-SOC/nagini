@@ -17,12 +17,9 @@ package cmd
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -46,13 +43,6 @@ where my_script.py has the following required syntax:
 `,
 	Args: cobra.ExactArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
-		// set up logger based on verbosity
-		if verbose == true {
-			debugLog = log.New(os.Stdout, "", log.LstdFlags)
-		} else {
-			debugLog = log.New(io.Discard, "", 0)
-		}
-
 		// parse params and args
 		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParallelParams(cmd, args[0], args[1])
 
@@ -70,91 +60,13 @@ where my_script.py has the following required syntax:
 			return
 		}
 
-		// The response was yes- continue.
-
-		// create the output directory.
-		e := lib.TryCreateDir(resolvedOutDir, true)
-		if e != nil {
-			cmd.PrintErrln(e)
-		} else {
-			debugLog.Printf("created dir %s\n", resolvedOutDir)
-		}
-
-		var outputFiles []string
-
-		// set parallel routine thread limit
-		runtime.GOMAXPROCS(threads)
-
-		// time iterators
-		curDate := startTime.Truncate(24 * time.Hour) // start at this date, at 00:00:00
-		curTime := startTime                          // start at this hour
-
-		// progress bars init
-		dayCount := int(endTime.Round(time.Hour*24).Sub(startTime.Truncate(time.Hour*24)).Hours() / 24.0) // calculate total number of days
-		barPool, dayBar, taskBar := lib.InitBars(dayCount, taskCount, debugLog)
-
-		// holds wait interface for all routines to finish.
-		var wgAll sync.WaitGroup
-
-		// for each date
-		for curDate.Before(endTime) || curDate.Equal(endTime) {
-			// holds wait interface for all routines of this particular day.
-			var wgDate sync.WaitGroup
-			var tempFiles []string
-			// for each hour of that date, excluding the last date where we may end early.
-			for curTime.Before(curDate.AddDate(0, 0, 1)) && (curTime.Before(endTime) || curTime.Equal(endTime)) {
-				// find all input files that match this hour
-				inputFileGlob := fmt.Sprintf("%s/%04d-%02d-%02d/%s.%02d*", resolvedLogDir, curTime.Year(), curTime.Month(), curTime.Day(), logType, curTime.Hour())
-				logFileMatches, e := filepath.Glob(inputFileGlob)
-				if e != nil {
-					debugLog.Printf("ERROR (%s): %s\n", curTime.Format(lib.TimeFormatHuman), e)
-					continue
-				}
-				taskCount += len(logFileMatches) // set total number of found log files, plus one for the concatenation step.
-				taskBar.SetTotal(taskCount)      // set new total on bar to include found log files
-				taskBar.Update()
-
-				// for every found log file, run the script.
-				for _, logFile := range logFileMatches {
-					outputFileTemp := filepath.Join(
-						outputDir,
-						curTime.Format(lib.TimeFormatDateNum)+filepath.Base(logFile)+".json",
-					)
-					tempFiles = append(tempFiles, outputFileTemp)
-					runScript(scriptPath, logFile, outputFileTemp, curTime, &wgDate, taskBar)
-				}
-				curTime = curTime.Add(time.Hour)
-			}
-
-			// wait for all date's to finish each log and then for them to concat into a single file.
-			wgAll.Add(1)
-
-			// determine output file and concat all temp files by date to it.
-			outputFile := filepath.Join(
-				outputDir,
-				fmt.Sprintf("%s-%04d-%02d-%02d.json", logType, curDate.Year(), curDate.Month(), curDate.Day()),
-			)
-			outputFiles = append(outputFiles, outputFile)
-			go lib.ConcatFilesParallelByDate(logType, tempFiles, outputFile, outputDir, debugLog, curDate, &wgDate, &wgAll, dayBar)
-
-			// iterate to next date
-			curDate = curDate.AddDate(0, 0, 1)
-		}
-
-		// wait for each day's go routine to finish. When done, exit!
-		debugLog.Println("All routines queued. Waiting for them to finish.")
-
-		wgAll.Wait()
-
-		if singleFile {
-			cmd.Println("Concat flag set. Concatting all output into a single output.json file.")
-			e = lib.ConcatFiles(debugLog, outputFiles, filepath.Join(outputDir, "output.json"), true, true)
-			if e != nil {
-				cmd.PrintErrln(e)
-			}
-		}
-
-		barPool.Stop()
+		// parse the given logs based on the runScript handler.
+		lib.ParseLogs(cmd,
+			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
+				runScript(scriptPath, logFile, outputFile, curTime, wgDate, taskBar)
+			},
+			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile,
+		)
 
 		cmd.Printf("\nComplete. Output: %s\n", outputDir)
 		return

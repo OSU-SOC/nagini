@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"io"
 	"log"
+	"os"
 	"time"
 
 	lib "github.com/OSU-SOC/nagini/lib"
@@ -33,6 +35,15 @@ var rootCmd = &cobra.Command{
 	Use:   "nagini",
 	Short: "Pull and filter logs to a subset for easier parsing.",
 	Long:  `Pull and filter logs to a subset for easier parsing.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// set up logger based on verbosity
+		if verbose == true {
+			debugLog = log.New(os.Stdout, "", log.LstdFlags)
+		} else {
+			debugLog = log.New(io.Discard, "", 0)
+		}
+
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
