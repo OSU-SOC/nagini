@@ -75,34 +75,6 @@ Example:
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-
-	// init vars
-	taskCount = 0
-
-	// Add flags
-
-	// time range to parse
-	runCmd.PersistentFlags().StringVarP(
-		&timeRange, "timerange", "r",
-		fmt.Sprintf( // write range of last 24 hours
-			"%s-%s",
-			time.Now().AddDate(0, 0, -1).Format(lib.TimeFormatShort), // yesterday at this time
-			time.Now().Format(lib.TimeFormatShort)),                  // right now
-		"time-range (local time). unspecified: last 24 hours. Format: YYYY/MM/DD:HH-YYYY/MM/DD:HH",
-	)
-
-	// default path for log storage is ./output-DATE
-	// uses this if no path specified.
-	defaultPath, e := filepath.Abs("./output-" + time.Now().Format(lib.TimeFormatLongNum))
-	if e != nil {
-		panic("fatal error: could not resolve relative path")
-	}
-
-	runCmd.PersistentFlags().StringVarP(&outputDir, "outdir", "o",
-		defaultPath,
-		"filtered logs output directory",
-	)
-
 }
 
 // takes args and params, does error checking, and then produces useful variables.

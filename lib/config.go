@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )
@@ -48,8 +49,11 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 	// Config paths in order of priority.
 	globalConfig.AddConfigPath("/etc/nagini/")
 	globalConfig.AddConfigPath("$HOME/.config/nagini/")
+
+	// set default vals for config generation
 	globalConfig.SetDefault("default_thread_count", 8)
 	globalConfig.SetDefault("zeek_log_dir", "/data/zeek/logs")
+	globalConfig.SetDefault("concat_by_default", false)
 
 	readConfig := true
 	for readConfig {
@@ -94,4 +98,8 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 		}
 	}
 	return globalConfig
+}
+
+func GenRuntimeConfig(globalConfig *viper.Viper, cmd *cobra.Command) {
+
 }
