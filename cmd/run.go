@@ -51,10 +51,14 @@ Example:
 		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
 		cmd.Printf("Command to run:\t\t%s %s\n", targetCommand, strings.Join(targetCommandArgs, " "))
 		cmd.Printf("Threads:\t\t%d\n", threads)
-		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
+		if writeStdout {
+			cmd.Printf("Temp Directory:\t\t%s\n\n", resolvedOutDir)
+		} else {
+			cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
+		}
 
 		// prompt if continue
-		if !lib.WaitForConfirm(cmd) {
+		if !noConfirm && !lib.WaitForConfirm(cmd) {
 			// if start is no, do not continue
 			return
 		}
@@ -66,9 +70,16 @@ Example:
 			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
 				runCommand(targetCommand, targetCommandArgs, logFile, outputFile, curTime, wgDate, taskBar)
 			},
-			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile)
+			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile, writeStdout)
 
-		cmd.Printf("\nComplete. Output: %s\n", outputDir)
+		cmd.Printf("\nComplete.")
+		if !writeStdout {
+			cmd.Printf("Output: %s", outputDir)
+		} else {
+
+		}
+		cmd.Println()
+
 		return
 	},
 }

@@ -20,6 +20,8 @@ var timeRange string // string format of time range to go over
 var outputDir string // directory to output logs
 var logDir string    // directory containing all zeek logs
 var singleFile bool  // holds whether or not to concat into one file.
+var noConfirm bool   // if set, skips continue prompt.
+var writeStdout bool // if set, writes to Stdout instead of the output directory.
 
 // calculated start time and end time values
 var startTime time.Time
@@ -40,7 +42,7 @@ var rootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// set up logger based on verbosity
 		if verbose == true {
-			debugLog = log.New(os.Stdout, "", log.LstdFlags)
+			debugLog = log.New(os.Stderr, "", log.LstdFlags)
 		} else {
 			debugLog = log.New(io.Discard, "", 0)
 		}
@@ -59,6 +61,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
+	rootCmd.SetOut(os.Stderr)
 	// read flags
 	// Set up global configuration path.
 	globalConfig := lib.ReadGlobalConfig()
@@ -77,6 +80,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&singleFile, "concat", "c",
 		globalConfig.GetBool("concat_by_default"),
 		"concat all output to one file, rather than files for each date.",
+	)
+	rootCmd.PersistentFlags().BoolVarP(&noConfirm, "noconfirm", "N",
+		false,
+		"Skip confirmation and begin operation.",
+	)
+	rootCmd.PersistentFlags().BoolVarP(&writeStdout, "stdout", "S",
+		false,
+		"Do not write to output directory, instead write to STDOUT.",
 	)
 
 	// time range to parse
