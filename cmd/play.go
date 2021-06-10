@@ -16,7 +16,7 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,7 +131,7 @@ func readRuntimeConfig(globalConfig *viper.Viper, configFile string) (runtimeCon
 	// uses this if no path specified.
 	defaultPath, e := filepath.Abs("./output-" + time.Now().Format(lib.TimeFormatLongNum))
 	if e != nil {
-		panic("fatal error: could not resolve relative path")
+		return nil, e
 	}
 	runtimeConfig = viper.New()
 
@@ -142,54 +142,31 @@ func readRuntimeConfig(globalConfig *viper.Viper, configFile string) (runtimeCon
 	runtimeConfig.SetDefault("outdir", defaultPath)
 
 	// read the runtime config.
-	runtimeConfig.ReadConfig(configFileReader)
-
-	// set default vals for config generation
-	globalConfig.SetDefault("default_thread_count", 8)
-	globalConfig.SetDefault("zeek_log_dir", "/data/zeek/logs")
-	globalConfig.SetDefault("concat_by_default", false)
-
-	readConfig := true
-	for readConfig {
-		readConfig = false
-		// Try ingesting config from one of the config paths.
-		if err := globalConfig.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				fmt.Println("WARN: could not find a config file. Trying to write a default to /etc/nagini/config.yaml")
-				// no config file exists.
-
-				// first, try to see if we have write acess to /etc/nagini.
-				err = TryCreateDir("/etc/nagini", false)
-				if err == nil {
-					// we have write access, create log file.
-					err = viper.WriteConfigAs("/etc/nagini/config.yaml")
-					if err == nil {
-						fmt.Println("WARN: Successfully created log file at /etc/nagini/config.yaml")
-						readConfig = true
-						continue
-					}
-				}
-				fmt.Println("WARN: could not read or write /etc/nagini/config.yaml, trying home directory ~/.config/nagini/config.yaml")
-				// next, try to write to home directory if we don't have correct perms. Make sure config dir and nagini exists.
-				homedir, err0 := os.UserHomeDir()
-				err1 := TryCreateDir(homedir+"/.config", false)
-				err2 := TryCreateDir(homedir+"/.config/nagini", false)
-				if err0 != nil || err1 != nil || err2 != nil {
-					panic(fmt.Errorf("No config file present, and failed to write a default. Please manually add one to /etc/nagini or ~/.config/nagini: %s %s", err1, err2))
-				} else {
-					err = viper.WriteConfigAs(homedir + "/.config/nagini/config.yaml")
-					if err != nil {
-						panic(fmt.Errorf("No config file present, and failed to write a default. Please manually add one to /etc/nagini or ~/.config/nagini: %s", err))
-					} else {
-						fmt.Printf("WARN: created a new config file at %s/.config/nagini/config.yaml\n", homedir)
-						readConfig = true
-					}
-				}
-			} else {
-				// Config file was found but another error was produced
-				panic(fmt.Errorf("Unexpected Error: %s", err))
-			}
-		}
+	e = runtimeConfig.ReadConfig(configFileReader)
+	if e != nil {
+		return nil, e
 	}
-	return globalConfig
+
+	// check for presence of fields with no default values:
+	if !runtimeConfig.IsSet("command") {
+		return nil, errors.New("config value 'command' not set")
+	}
+	if !runtimeConfig.IsSet("type") {
+		return nil, errors.New("config value 'type' not set. Ex. dns, rdp, smtp")
+	}
+
+	// TODO: allow other types of date inputs
+	if runtimeConfig.IsSet("time_range") {
+		if !runtimeConfig.IsSet("time_range.start_time") ||
+			!runtimeConfig.IsSet("time_range.end_time") {
+			return nil, errors.New("config value 'time_range' provided but sub fields 'start_time' and/or 'end_time' are not provided.")
+		} else {
+			// TODO: parse dates
+		}
+
+	} else {
+		return nil, errors.New("No date range provided.")
+	}
+
+	return runtimeConfig, nil
 }

@@ -46,11 +46,11 @@ where my_script.py has the following required syntax:
 		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, scriptPath := parseParallelParams(cmd, args[0], args[1])
 
 		// list params
-		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
-		cmd.Printf("Log Type:\t\t%s\n", logType)
+		cmd.Printf("Zeek Log Directory:\t%s\n", config.ZeekLogDir)
+		cmd.Printf("Log Type:\t\t%s\n", config.LogType)
 		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
 		cmd.Printf("Script to Run:\t\t%s\n", scriptPath)
-		cmd.Printf("Threads:\t\t%d\n", threads)
+		cmd.Printf("Threads:\t\t%d\n", config.Threads)
 		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 
 		// prompt if continue

@@ -31,6 +31,9 @@ type Config struct {
 	Concat       bool
 	Threads      int
 	RawTimeRange string
+	StartTime    time.Time
+	EndTime      time.Time
+	LogType      string
 	ZeekLogDir   string
 	OutputDir    string
 }

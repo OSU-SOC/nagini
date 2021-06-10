@@ -6,17 +6,13 @@ import (
 	"os"
 	"time"
 
+	lib "github.com/OSU-SOC/nagini/lib"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // args
-var threads int      // number of threads to run
-var verbose bool     // verbose
-var timeRange string // string format of time range to go over
-var outputDir string // directory to output logs
-var logDir string    // directory containing all zeek logs
-var singleFile bool  // holds whether or not to concat into one file.
+var config lib.Config
 
 // calculated start time and end time values
 var startTime time.Time
