@@ -2,12 +2,13 @@ package lib
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 )
 
 // The DataSource struct represents fields for an individual data source
@@ -25,21 +26,51 @@ type DataSource struct {
 	Type       string `yaml:"log_type"`    //log_type
 }
 
-// The High-Level Config
 type Config struct {
-	DataSources []DataSource `yaml:"data_sources"` // data_sources
+	Verbose      bool
+	Concat       bool
+	Threads      int
+	RawTimeRange string
+	ZeekLogDir   string
+	OutputDir    string
 }
 
-// Read the YAML config file from the specified path by string input,
-// and then populate a struct based on present fields. Returns
-// the struct parsed and if there was an error in parsing.
-func ParseConfig(filepath string) (configData Config, err error) {
-	// Try to read file from config.
-	configBuffer, err := ioutil.ReadFile(filepath)
+// parses and verifies arguments that are global to the root command.
+func ParseSharedArgs(cmd *cobra.Command, timeRange string, logDir string, outputDir string, logTypeArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string) {
+	// build time range timestamps
+	var dateStrings = strings.Split(timeRange, "-")
+	startTime, startErr := time.Parse(TimeFormatShort, dateStrings[0])
+	endTime, endErr := time.Parse(TimeFormatShort, dateStrings[1])
 
-	// Parse the YAML file, and check for generated errors.
-	err = yaml.Unmarshal(configBuffer, &configData)
-	return configData, err
+	// if failed to generate timestamp values, error out
+	if startErr != nil || endErr != nil {
+		cmd.PrintErrln("error: Provided dates malformed. Please provide dates in the following format: YYYY/MM/DD:HH-YYYY/MM/DD:HH")
+		os.Exit(1)
+	}
+
+	// try to resolve output directory, see if it is valid input.
+	resolvedOutDir, e := filepath.Abs(outputDir)
+	if e != nil {
+		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+		os.Exit(1)
+	}
+
+	// try to resolve zeek log dir and see if exists and is real dir.
+	resolvedLogDir, e = filepath.Abs(logDir)
+	if e != nil {
+		cmd.PrintErrln("error: could not resolve relative path in user provided input.")
+		os.Exit(1)
+	}
+	logDirInfo, e := os.Stat(resolvedLogDir)
+	if os.IsNotExist(e) || !logDirInfo.IsDir() {
+		cmd.PrintErrf("error: invalid Zeek log directory %s, either does not exist or is not a directory.\n", resolvedLogDir)
+		os.Exit(1)
+	}
+
+	// TODO: add logType verification
+	logType = logTypeArg
+
+	return
 }
 
 // takes a global config from /etc/nagini or ~/.config/nagini, reads in vars that are present,
@@ -102,7 +133,46 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 	return globalConfig
 }
 
-// TODO
-func GenRuntimeConfig(globalConfig *viper.Viper, cmd *cobra.Command) {
+func addConfigFlags(cmd *cobra.Command, config *Config) {
+	// read flags
+	// Set up global configuration path.
+	globalConfig := ReadGlobalConfig()
 
+	// threads
+	cmd.PersistentFlags().IntVarP(&config.Threads, "threads", "t", globalConfig.GetInt("default_thread_count"), "Number of threads to run in parallel")
+
+	// default zeek dir
+	cmd.PersistentFlags().StringVarP(&config.ZeekLogDir, "logdir", "i",
+		globalConfig.GetString("zeek_log_dir"),
+		"Zeek log directory",
+	)
+
+	cmd.PersistentFlags().BoolVarP(&config.Verbose, "verbose", "v", false, "verbose output")
+
+	cmd.PersistentFlags().BoolVarP(&config.Concat, "concat", "c",
+		globalConfig.GetBool("concat_by_default"),
+		"concat all output to one file, rather than files for each date.",
+	)
+
+	// time range to parse
+	cmd.PersistentFlags().StringVarP(
+		&config.RawTimeRange, "timerange", "r",
+		fmt.Sprintf( // write range of last 24 hours
+			"%s-%s",
+			time.Now().AddDate(0, 0, -1).Format(TimeFormatShort), // yesterday at this time
+			time.Now().Format(TimeFormatShort)),                  // right now
+		"time-range (local time). unspecified: last 24 hours. Format: YYYY/MM/DD:HH-YYYY/MM/DD:HH",
+	)
+
+	// default path for log storage is ./output-DATE
+	// uses this if no path specified.
+	defaultPath, e := filepath.Abs("./output-" + time.Now().Format(TimeFormatLongNum))
+	if e != nil {
+		panic("fatal error: could not resolve relative path")
+	}
+
+	cmd.PersistentFlags().StringVarP(&config.OutputDir, "outdir", "o",
+		defaultPath,
+		"filtered logs output directory",
+	)
 }

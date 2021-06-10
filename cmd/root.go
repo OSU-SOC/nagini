@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
-	lib "github.com/OSU-SOC/nagini/lib"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -59,45 +56,4 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	// read flags
-	// Set up global configuration path.
-	globalConfig := lib.ReadGlobalConfig()
-
-	// threads
-	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "t", globalConfig.GetInt("default_thread_count"), "Number of threads to run in parallel")
-
-	// default zeek dir
-	rootCmd.PersistentFlags().StringVarP(&logDir, "logdir", "i",
-		globalConfig.GetString("zeek_log_dir"),
-		"Zeek log directory",
-	)
-
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-
-	rootCmd.PersistentFlags().BoolVarP(&singleFile, "concat", "c",
-		globalConfig.GetBool("concat_by_default"),
-		"concat all output to one file, rather than files for each date.",
-	)
-
-	// time range to parse
-	rootCmd.PersistentFlags().StringVarP(
-		&timeRange, "timerange", "r",
-		fmt.Sprintf( // write range of last 24 hours
-			"%s-%s",
-			time.Now().AddDate(0, 0, -1).Format(lib.TimeFormatShort), // yesterday at this time
-			time.Now().Format(lib.TimeFormatShort)),                  // right now
-		"time-range (local time). unspecified: last 24 hours. Format: YYYY/MM/DD:HH-YYYY/MM/DD:HH",
-	)
-
-	// default path for log storage is ./output-DATE
-	// uses this if no path specified.
-	defaultPath, e := filepath.Abs("./output-" + time.Now().Format(lib.TimeFormatLongNum))
-	if e != nil {
-		panic("fatal error: could not resolve relative path")
-	}
-
-	rootCmd.PersistentFlags().StringVarP(&outputDir, "outdir", "o",
-		defaultPath,
-		"filtered logs output directory",
-	)
 }
