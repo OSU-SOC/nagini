@@ -54,7 +54,7 @@ where my_script.py has the following required syntax:
 		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 
 		// prompt if continue
-		if !lib.WaitForConfirm(cmd) {
+		if !noConfirm && !lib.WaitForConfirm(cmd) {
 			// if start is no, do not continue
 			return
 		}
@@ -64,7 +64,7 @@ where my_script.py has the following required syntax:
 			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
 				runScript(scriptPath, logFile, outputFile, curTime, wgDate, taskBar)
 			},
-			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile,
+			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile, false,
 		)
 
 		cmd.Printf("\nComplete. Output: %s\n", outputDir)

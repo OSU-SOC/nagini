@@ -36,6 +36,8 @@ type Config struct {
 	LogType      string
 	ZeekLogDir   string
 	OutputDir    string
+	NoConfirm    bool
+	Stdout       bool
 }
 
 // parses and verifies arguments that are global to the root command.
@@ -104,7 +106,7 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 				err = TryCreateDir("/etc/nagini", false)
 				if err == nil {
 					// we have write access, create log file.
-					err = viper.WriteConfigAs("/etc/nagini/config.yaml")
+					err = globalConfig.WriteConfigAs("/etc/nagini/config.yaml")
 					if err == nil {
 						fmt.Println("WARN: Successfully created log file at /etc/nagini/config.yaml")
 						readConfig = true
@@ -119,7 +121,7 @@ func ReadGlobalConfig() (globalConfig *viper.Viper) {
 				if err0 != nil || err1 != nil || err2 != nil {
 					panic(fmt.Errorf("No config file present, and failed to write a default. Please manually add one to /etc/nagini or ~/.config/nagini: %s %s", err1, err2))
 				} else {
-					err = viper.WriteConfigAs(homedir + "/.config/nagini/config.yaml")
+					err = globalConfig.WriteConfigAs(homedir + "/.config/nagini/config.yaml")
 					if err != nil {
 						panic(fmt.Errorf("No config file present, and failed to write a default. Please manually add one to /etc/nagini or ~/.config/nagini: %s", err))
 					} else {

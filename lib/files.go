@@ -95,6 +95,11 @@ func ConcatFilesParallelByDate(logType string, inputFiles []string, outputFile, 
 	}
 }
 
+// takes a list of files and writes them to STDOUT
+func ConcatToStdout(logger *log.Logger, inputFiles []string, deleteInputAfterRead bool, ignoreMissing bool) (e error) {
+	return concatFilesToFd(logger, inputFiles, os.Stdout, deleteInputAfterRead, ignoreMissing)
+}
+
 // takes a list of files, sorts them and concats them into a single file. if deleteInputAfterRead, also deletes the input after use.
 func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, deleteInputAfterRead bool, ignoreMissing bool) (e error) {
 	// try to create outputFile
@@ -102,6 +107,12 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 	if fcErr != nil {
 		return fcErr
 	}
+	return concatFilesToFd(logger, inputFiles, outFd, deleteInputAfterRead, ignoreMissing)
+}
+
+// takes the given os.File and the list of inputFiles, and writes to it in-order.
+// used by Concat exported functions.
+func concatFilesToFd(logger *log.Logger, inputFiles []string, outFd *os.File, deleteInputAfterRead bool, ignoreMissing bool) (e error) {
 
 	// no error. Sort alphabetically (therefore in time order)
 	sort.Strings(inputFiles)
@@ -115,7 +126,7 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 			}
 			continue
 		}
-		logger.Printf("Concatting %s into %s\n", inputFile, outputFile)
+		logger.Printf("Concatting %s\n", inputFile)
 
 		// read temp file and write to final output file
 		scanner := bufio.NewScanner(tempFd)
@@ -130,7 +141,7 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 		if deleteInputAfterRead {
 			err = os.Remove(inputFile)
 			if err != nil {
-				logger.Printf("ERROR: could not remove temp file '%s': %s\n", fcErr, err)
+				logger.Printf("ERROR: could not remove temp file '%s': %s\n", inputFile, err)
 			}
 		}
 	}
@@ -140,7 +151,7 @@ func ConcatFiles(logger *log.Logger, inputFiles []string, outputFile string, del
 
 // takes a log type, time range, zeek log directory, thread information, and output directory info.
 // it then parses logs based on the logHandler and then outputs the files to the given directory, all parallelized.
-func ParseLogs(cmd *cobra.Command, logHandler func(string, string, time.Time, *sync.WaitGroup, *pb.ProgressBar), logger *log.Logger, startTime time.Time, endTime time.Time, logType string, resolvedLogDir string, resolvedOutDir string, threads int, singleFile bool) {
+func ParseLogs(cmd *cobra.Command, logHandler func(string, string, time.Time, *sync.WaitGroup, *pb.ProgressBar), logger *log.Logger, startTime time.Time, endTime time.Time, logType string, resolvedLogDir string, resolvedOutDir string, threads int, singleFile bool, writeStdout bool) {
 	var taskCount = 0
 
 	// create the output directory.
@@ -221,9 +232,23 @@ func ParseLogs(cmd *cobra.Command, logHandler func(string, string, time.Time, *s
 
 	wgAll.Wait()
 
-	if singleFile {
-		cmd.Println("Concat flag set. Concatting all output into a single output.json file.")
-		e = ConcatFiles(logger, outputFiles, filepath.Join(resolvedOutDir, "output.json"), true, true)
+	// if we want to write to stdout, concat output directory, write to std, then delete output directory.
+	if writeStdout {
+		// read all output to stdout
+		e = ConcatToStdout(logger, outputFiles, true, true)
+		if e != nil {
+			cmd.PrintErrln(e)
+		}
+
+		// delete output dir, if possible.
+		e = os.Remove(resolvedOutDir)
+		if e != nil {
+			logger.Printf("ERROR: could not remove temp directory '%s': %s\n", resolvedOutDir, e)
+		}
+	} else if singleFile {
+		// not stdout and singleFile flag set, so we should write to a single file.
+		cmd.Printf("Concat flag set. Concatting all output into a single %s.json file.\n", logType)
+		e = ConcatFiles(logger, outputFiles, filepath.Join(resolvedOutDir, fmt.Sprintf("%s.json", logType)), true, true)
 		if e != nil {
 			cmd.PrintErrln(e)
 		}

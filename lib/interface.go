@@ -2,6 +2,7 @@ package lib
 
 import (
 	"log"
+	"os"
 
 	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ func WaitForConfirm(cmd *cobra.Command) (start bool) {
 	startMenu := wmenu.NewMenu("Continue?")
 	startMenu.IsYesNo(0)
 	startMenu.LoopOnInvalid()
+	startMenu.ChangeReaderWriter(os.Stdin, os.Stderr, os.Stderr)
 	startMenu.Action(func(opts []wmenu.Opt) error {
 		start = (opts[0].ID == 0)
 		return nil
@@ -34,6 +36,7 @@ func InitBars(dayCount int, taskCount int, logger *log.Logger) (pool *pb.Pool, d
 	taskBar = pb.New(taskCount)
 	taskBar.BarStart = "Log Parses Complete: ["
 	pool, err := pb.StartPool(taskBar, dayBar)
+	pool.Output = os.Stderr
 	if err != nil {
 		logger.Println("ERROR: Failed to start progess bar.")
 	}
