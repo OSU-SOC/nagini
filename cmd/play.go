@@ -18,7 +18,6 @@ package cmd
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -50,14 +49,14 @@ where my config.yaml is something similar to:
 	Args: cobra.MinimumNArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
 		// parse params and args
-		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, targetCommand, targetCommandArgs := parseRunParams(cmd, args[0], args[1:])
+		resolvedStartTime, resolvedEndTime, resolvedOutDir, resolvedLogDir, resolvedLogType, targetCommand, targetCommandArgs := parseRunParams(cmd, args[0], args[1:])
 
 		// list params
-		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
-		cmd.Printf("Log Type:\t\t%s\n", logType)
-		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
+		cmd.Printf("Zeek Log Directory:\t%s\n", config.ZeekLogDir)
+		cmd.Printf("Log Type:\t\t%s\n", resolvedLogType)
+		cmd.Printf("Date Range:\t\t%s - %s\n", resolvedStartTime.Format(lib.TimeFormatHuman), resolvedEndTime.Format(lib.TimeFormatHuman))
 		cmd.Printf("Command to run:\t\t%s %s\n", targetCommand, strings.Join(targetCommandArgs, " "))
-		cmd.Printf("Threads:\t\t%d\n", threads)
+		cmd.Printf("Threads:\t\t%d\n", config.Threads)
 		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 
 		// prompt if continue
@@ -73,9 +72,9 @@ where my config.yaml is something similar to:
 			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
 				runCommand(targetCommand, targetCommandArgs, logFile, outputFile, curTime, wgDate, taskBar)
 			},
-			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile)
+			debugLog, resolvedStartTime, resolvedEndTime, resolvedLogType, resolvedLogDir, resolvedOutDir, config.Threads, config.Concat, config.Stdout)
 
-		cmd.Printf("\nComplete. Output: %s\n", outputDir)
+		cmd.Printf("\nComplete. Output: %s\n", resolvedOutDir)
 		return
 	},
 }
@@ -86,42 +85,15 @@ func init() {
 
 // takes args and params, does error checking, and then produces useful variables.
 func parsePlayParams(cmd *cobra.Command, configFile string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, execPath string, execArgs []string) {
-	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, timeRange, logDir, outputDir, logTypeArg)
+	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, config.RawTimeRange, config.ZeekLogDir, config.OutputDir, config.LogType)
 
-	lookInPath := false
-	// try to resolve script, see if it exists.
-	localExecPath, e1 := filepath.Abs(commandToRun[0])
-	_, e2 := os.Stat(localExecPath)
-	if e1 != nil || e2 != nil {
-		// could not find local file, so look for it in path
-		lookInPath = true
-	} else {
-		// found local file, see if it is executable
-		localExecPath, e := exec.LookPath(localExecPath)
-		if e != nil {
-			// the local file is not executable, so lets go search path.
-			lookInPath = true
-		} else {
-			// local file exists and is executable. use it.
-			execPath = localExecPath
-		}
-	}
+	// TODO
+	runtimeConfig, err := readRuntimeConfig(configFile)
 
-	// if we failed at all to look for a local file, look in path.
-	if lookInPath {
-		execPath, e1 = exec.LookPath(commandToRun[0])
-		if e1 != nil {
-			// no local file or file in path that is executable. Error and exit.
-			cmd.PrintErrf("error: could not find an executable '%s'. Make sure it exists and is marked as executable.\n", commandToRun[0])
-			os.Exit(1)
-		}
-	}
-
-	execArgs = commandToRun[1:]
 	return
 }
 
-func readRuntimeConfig(globalConfig *viper.Viper, configFile string) (runtimeConfig *viper.Viper, err error) {
+func readRuntimeConfig(configFile string) (runtimeConfig *viper.Viper, err error) {
 	configFileReader, err := os.Open(configFile)
 	if err != nil {
 		return nil, err

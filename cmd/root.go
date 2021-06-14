@@ -15,6 +15,7 @@ import (
 
 // args
 var config lib.Config
+var globalConfig *viper.Viper
 
 // global vars
 var debugLog *log.Logger
@@ -53,7 +54,7 @@ func init() {
 	rootCmd.SetOut(os.Stderr)
 	// read flags
 	// Set up global configuration path.
-	globalConfig := lib.ReadGlobalConfig()
+	globalConfig = lib.ReadGlobalConfig()
 
 	// threads
 	rootCmd.PersistentFlags().IntVarP(&config.Threads, "threads", "t", globalConfig.GetInt("default_thread_count"), "Number of threads to run in parallel")

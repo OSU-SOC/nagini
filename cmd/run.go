@@ -43,22 +43,22 @@ Example:
 	Args: cobra.MinimumNArgs(2), // 1 argument: script to run
 	Run: func(cmd *cobra.Command, args []string) {
 		// parse params and args
-		startTime, endTime, resolvedOutDir, resolvedLogDir, logType, targetCommand, targetCommandArgs := parseRunParams(cmd, args[0], args[1:])
+		resolvedStartTime, resolvedEndTime, resolvedOutDir, resolvedLogDir, resolvedLogType, resolvedTargetCommand, resolvedTargetCommandArgs := parseRunParams(cmd, args[0], args[1:])
 
 		// list params
-		cmd.Printf("Zeek Log Directory:\t%s\n", logDir)
-		cmd.Printf("Log Type:\t\t%s\n", logType)
-		cmd.Printf("Date Range:\t\t%s - %s\n", startTime.Format(lib.TimeFormatHuman), endTime.Format(lib.TimeFormatHuman))
-		cmd.Printf("Command to run:\t\t%s %s\n", targetCommand, strings.Join(targetCommandArgs, " "))
-		cmd.Printf("Threads:\t\t%d\n", threads)
-		if writeStdout {
+		cmd.Printf("Zeek Log Directory:\t%s\n", resolvedLogDir)
+		cmd.Printf("Log Type:\t\t%s\n", resolvedLogType)
+		cmd.Printf("Date Range:\t\t%s - %s\n", resolvedStartTime.Format(lib.TimeFormatHuman), resolvedEndTime.Format(lib.TimeFormatHuman))
+		cmd.Printf("Command to run:\t\t%s %s\n", resolvedTargetCommand, strings.Join(resolvedTargetCommandArgs, " "))
+		cmd.Printf("Threads:\t\t%d\n", config.Threads)
+		if config.Stdout {
 			cmd.Printf("Temp Directory:\t\t%s\n\n", resolvedOutDir)
 		} else {
 			cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 		}
 
 		// prompt if continue
-		if !noConfirm && !lib.WaitForConfirm(cmd) {
+		if !config.NoConfirm && !lib.WaitForConfirm(cmd) {
 			// if start is no, do not continue
 			return
 		}
@@ -68,13 +68,13 @@ Example:
 		// parse the given logs based on the runCommand handler.
 		lib.ParseLogs(cmd,
 			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
-				runCommand(targetCommand, targetCommandArgs, logFile, outputFile, curTime, wgDate, taskBar)
+				runCommand(resolvedTargetCommand, resolvedTargetCommandArgs, logFile, outputFile, curTime, wgDate, taskBar)
 			},
-			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile, writeStdout)
+			debugLog, resolvedStartTime, resolvedEndTime, resolvedLogType, resolvedLogDir, resolvedOutDir, config.Threads, config.Concat, config.Stdout)
 
 		cmd.Printf("\nComplete.")
-		if !writeStdout {
-			cmd.Printf("Output: %s", outputDir)
+		if !config.Stdout {
+			cmd.Printf("Output: %s", resolvedOutDir)
 		} else {
 
 		}
@@ -90,7 +90,7 @@ func init() {
 
 // takes args and params, does error checking, and then produces useful variables.
 func parseRunParams(cmd *cobra.Command, logTypeArg string, commandToRun []string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, execPath string, execArgs []string) {
-	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, timeRange, logDir, outputDir, logTypeArg)
+	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, config.RawTimeRange, config.ZeekLogDir, config.OutputDir, logTypeArg)
 
 	lookInPath := false
 	// try to resolve script, see if it exists.

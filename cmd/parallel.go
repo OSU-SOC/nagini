@@ -54,7 +54,7 @@ where my_script.py has the following required syntax:
 		cmd.Printf("Output Directory:\t%s\n\n", resolvedOutDir)
 
 		// prompt if continue
-		if !noConfirm && !lib.WaitForConfirm(cmd) {
+		if !config.NoConfirm && !lib.WaitForConfirm(cmd) {
 			// if start is no, do not continue
 			return
 		}
@@ -64,10 +64,10 @@ where my_script.py has the following required syntax:
 			func(logFile string, outputFile string, curTime time.Time, wgDate *sync.WaitGroup, taskBar *pb.ProgressBar) {
 				runScript(scriptPath, logFile, outputFile, curTime, wgDate, taskBar)
 			},
-			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, threads, singleFile, false,
+			debugLog, startTime, endTime, logType, resolvedLogDir, resolvedOutDir, config.Threads, config.Concat, false,
 		)
 
-		cmd.Printf("\nComplete. Output: %s\n", outputDir)
+		cmd.Printf("\nComplete. Output: %s\n", config.OutputDir)
 		return
 	},
 }
@@ -78,7 +78,7 @@ func init() {
 
 // takes args and params, does error checking, and then produces useful variables.
 func parseParallelParams(cmd *cobra.Command, logTypeArg string, scriptPathArg string) (startTime time.Time, endTime time.Time, resolvedOutDir string, resolvedLogDir string, logType string, scriptPath string) {
-	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, timeRange, logDir, outputDir, logTypeArg)
+	startTime, endTime, resolvedOutDir, resolvedLogDir, logType = lib.ParseSharedArgs(cmd, config.RawTimeRange, config.ZeekLogDir, config.OutputDir, logTypeArg)
 
 	// try to resolve script, see if it exists.
 	scriptPath, e := filepath.Abs(scriptPathArg)
