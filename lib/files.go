@@ -211,7 +211,9 @@ func ParseLogs(cmd *cobra.Command, logHandler func(string, string, time.Time, *s
 	curTime := startTime                          // start at this hour
 
 	// progress bars init
-	dayCount := int(endTime.Round(time.Hour*24).Sub(startTime.Truncate(time.Hour*24)).Hours() / 24.0) // calculate total number of days
+	dayCount := int(
+		endTime.Sub(startTime).Hours()/24.0,
+	) + 1 // calculate total number of days
 	barPool, dayBar, taskBar := InitBars(dayCount, taskCount, logger)
 
 	// holds wait interface for all routines to finish.
